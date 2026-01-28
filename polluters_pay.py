@@ -20,7 +20,6 @@ if not st.session_state.authenticated:
     if password_input == APP_PASSWORD:
         st.session_state.authenticated = True
         st.success("✅ Password correct! You can now use the app.")
-        # Removed st.stop() here so the app continues
     elif password_input:
         st.warning("❌ Incorrect password. Try again.")
     else:
@@ -83,58 +82,61 @@ cost_index = 1 if scenario.startswith("Conservative") else 0
 # WATER METHODS
 # ======================
 st.header("💧 Water Treatment Methods")
-st.info("Select one or more methods.")
+st.info("Select **only one method**. The type (Removal / Destruction) is shown next to the method.")
 
 water_methods = {
-    "Granular Activated Carbon (GAC)": {"cost": (0.02, 0.06), "type": "Removal"},
-    "Ion Exchange": {"cost": (0.03, 0.08), "type": "Removal"},
-    "RO / Nanofiltration": {"cost": (0.05, 0.15), "type": "Removal"},
-    "Foam Fractionation": {"cost": (0.01, 0.05), "type": "Removal"},
-    "Advanced Oxidation (AOP)": {"cost": (0.10, 0.50), "type": "Destruction"},
-    "Supercritical Water Oxidation (SCWO)": {"cost": (0.20, 1.00), "type": "Destruction"},
-    "Pump-and-Treat + Incineration": {"cost": (0.10, 0.20), "type": "Removal + Destruction"},
-    "Electrochemical": {"cost": (0.001, 0.001), "type": "Destruction"}
+    "Granular Activated Carbon (GAC) (Removal)": {"cost": (0.02, 0.06), "type": "Removal"},
+    "Ion Exchange (Removal)": {"cost": (0.03, 0.08), "type": "Removal"},
+    "RO / Nanofiltration (Removal)": {"cost": (0.05, 0.15), "type": "Removal"},
+    "Foam Fractionation (Removal)": {"cost": (0.01, 0.05), "type": "Removal"},
+    "Advanced Oxidation (AOP) (Destruction)": {"cost": (0.10, 0.50), "type": "Destruction"},
+    "Supercritical Water Oxidation (SCWO) (Destruction)": {"cost": (0.20, 1.00), "type": "Destruction"},
+    "Pump-and-Treat + Incineration (Removal)": {"cost": (0.10, 0.20), "type": "Removal"},
+    "Pump-and-Treat + Incineration (Destruction)": {"cost": (0.10, 0.20), "type": "Destruction"},
+    "Electrochemical (Destruction)": {"cost": (0.001, 0.001), "type": "Destruction"}
 }
+
+selected_water_method = st.radio("Choose one water treatment method:", list(water_methods.keys()))
 
 pfas_removal_water = 0
 pfas_destruction_water = 0
 
-for method, info in water_methods.items():
-    selected = st.checkbox(f"{method} ({info['type']})", key=f"water_{method}")
-    if selected:
-        cost_per_m3 = info["cost"][cost_index]
-        total_cost = cost_per_m3 * water_volume
-        if "Removal" in info["type"]:
-            pfas_removal_water += total_cost
-        if "Destruction" in info["type"]:
-            pfas_destruction_water += total_cost
+if selected_water_method:
+    info = water_methods[selected_water_method]
+    total_cost = info["cost"][cost_index] * water_volume
+    if info["type"] == "Removal":
+        pfas_removal_water += total_cost
+    else:
+        pfas_destruction_water += total_cost
 
 # ======================
 # SOIL METHODS
 # ======================
 st.header("🌱 Soil Treatment Methods")
-st.info("Select one or more methods.")
+st.info("Select **only one method**. The type (Removal / Destruction) is shown next to the method.")
 
 soil_methods = {
-    "Excavate & Incinerate / Landfill": {"cost": (50, 200), "type": "Removal + Destruction"},
-    "Soil Washing + SCWO/AOP": {"cost": (8, 20), "type": "Removal + Destruction"},
-    "Thermal Desorption": {"cost": (100, 500), "type": "Destruction"},
-    "In-Situ Stabilisation": {"cost": (20, 40), "type": "Removal"},
-    "AOP (ex-situ eluate)": {"cost": (0.10, 0.50), "type": "Destruction"}
+    "Excavate & Incinerate / Landfill (Removal)": {"cost": (50, 200), "type": "Removal"},
+    "Excavate & Incinerate / Landfill (Destruction)": {"cost": (50, 200), "type": "Destruction"},
+    "Soil Washing + SCWO/AOP (Removal)": {"cost": (8, 20), "type": "Removal"},
+    "Soil Washing + SCWO/AOP (Destruction)": {"cost": (8, 20), "type": "Destruction"},
+    "Thermal Desorption (Destruction)": {"cost": (100, 500), "type": "Destruction"},
+    "In-Situ Stabilisation (Removal)": {"cost": (20, 40), "type": "Removal"},
+    "AOP (ex-situ eluate) (Destruction)": {"cost": (0.10, 0.50), "type": "Destruction"}
 }
+
+selected_soil_method = st.radio("Choose one soil treatment method:", list(soil_methods.keys()))
 
 pfas_removal_soil = 0
 pfas_destruction_soil = 0
 
-for method, info in soil_methods.items():
-    selected = st.checkbox(f"{method} ({info['type']})", key=f"soil_{method}")
-    if selected:
-        cost_per_tonne = info["cost"][cost_index]
-        total_cost = cost_per_tonne * soil_mass
-        if "Removal" in info["type"]:
-            pfas_removal_soil += total_cost
-        if "Destruction" in info["type"]:
-            pfas_destruction_soil += total_cost
+if selected_soil_method:
+    info = soil_methods[selected_soil_method]
+    total_cost = info["cost"][cost_index] * soil_mass
+    if info["type"] == "Removal":
+        pfas_removal_soil += total_cost
+    else:
+        pfas_destruction_soil += total_cost
 
 # ======================
 # GRAND TOTAL & VISUALS
@@ -167,16 +169,25 @@ else:
 
     st.table(summary_df.style.format({"Cost (£)": "£{:,.0f}"}))
 
-    fig = px.bar(
-        summary_df.iloc[:-1],
-        x="Category",
-        y="Cost (£)",
-        color="Category",
-        text="Cost (£)"
-    )
-    fig.update_layout(showlegend=False)
+    # ======================
+    # BAR CHART: Removal vs Destruction
+    # ======================
+    chart_df = pd.DataFrame({
+        "Category": ["Water", "Soil"],
+        "Removal": [pfas_removal_water, pfas_removal_soil],
+        "Destruction": [pfas_destruction_water, pfas_destruction_soil]
+    })
+
+    chart_df_melt = chart_df.melt(id_vars="Category", value_vars=["Removal", "Destruction"],
+                                   var_name="Type", value_name="Cost (£)")
+
+    fig = px.bar(chart_df_melt, x="Category", y="Cost (£)", color="Type", text="Cost (£)",
+                 title="PFAS Removal vs Destruction Costs")
     st.plotly_chart(fig, use_container_width=True)
 
+    # ======================
+    # CSV download
+    # ======================
     st.subheader("Download Cost Breakdown CSV")
     csv = summary_df.to_csv(index=False)
     st.download_button(
@@ -185,3 +196,4 @@ else:
         file_name=f"{site_name}_PFAS_Polluter_Pays.csv",
         mime="text/csv"
     )
+
