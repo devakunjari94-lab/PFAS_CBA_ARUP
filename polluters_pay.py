@@ -6,7 +6,7 @@ import plotly.express as px
 # ======================
 # 🔐 PASSWORD PROTECTION
 # ======================
-APP_PASSWORD = st.secrets["PASSWORD"]
+APP_PASSWORD = "ARUPPFASSWS2026"  # Your actual password
 
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
@@ -75,7 +75,6 @@ scenario = st.radio(
     ["Conservative (high-end estimate)", "Balanced (most likely estimate)"]
 )
 
-# Determine which cost index to use
 cost_index = 1 if scenario.startswith("Conservative") else 0
 
 # ======================
