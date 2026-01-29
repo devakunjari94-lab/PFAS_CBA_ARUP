@@ -48,7 +48,7 @@ st.markdown("""
 Estimate PFAS remediation costs under the **polluter-pays principle**.  
 Costs are separated into **water vs soil**, **removal vs destruction**, and **PFAS chain-specific**.  
 
-Guidance & thresholds are aligned with the **UK Environment Agency PFAS thresholds**:  
+Guidance & thresholds aligned with **UK Environment Agency PFAS thresholds**:  
 [EA PFAS Thresholds Summary](https://www.gov.uk/government/publications/developing-thresholds-for-managing-pfas-in-the-water-environment/developing-thresholds-for-managing-pfas-in-the-water-environment-summary)
 """)
 
@@ -93,7 +93,7 @@ scenario_config = SCENARIOS[scenario]
 cost_index = scenario_config["cost_index"]
 
 # ======================
-# UK PFAS thresholds (EA summary)
+# UK PFAS thresholds
 # ======================
 EA_THRESHOLDS = {
     "Drinking water": {
@@ -228,7 +228,7 @@ soil_methods = {
     "Thermal Desorption (Destruction – mineralisation)": {
         "cost": (100, 600),
         "type": "Destruction",
-        "efficiency": (0.8, 1.0),
+        "efficiency": (0.8,1.0),
         "pfas_scope": ["PFOA","PFOS","PFHxS","PFNA"],
         "secondary_waste": True,
         "waste_form": "desorption residues"
@@ -252,7 +252,7 @@ soil_methods = {
 selected_soil_method = st.radio("Choose one soil treatment method:", list(soil_methods.keys()))
 
 # ======================
-# CALCULATIONS
+# CALCULATION FUNCTIONS
 # ======================
 def calculate_residual(influent_dict, method):
     residual = {}
@@ -265,7 +265,7 @@ def calculate_residual(influent_dict, method):
             residual[chain] = conc
     return residual
 
-# Water
+# Water calculation
 pfas_removal_water = 0
 pfas_destruction_water = 0
 residual_water = influent_pf.copy()
@@ -282,7 +282,7 @@ if selected_water_method:
     if info.get("technology_readiness") == "pilot":
         st.info(info.get("info"))
 
-# Soil
+# Soil calculation
 pfas_removal_soil = 0
 pfas_destruction_soil = 0
 residual_soil = influent_pf.copy()
@@ -301,7 +301,7 @@ if selected_soil_method:
 # COMPLIANCE CHECK
 # ======================
 residual_combined = {chain: min(residual_water[chain], residual_soil[chain]) for chain in pfas_chains}
-thresholds = EA_THRESHOLDS["Drinking water"] if receptor_type == "Drinking water" else EA_THRESHOLDS["Environmental / Surface water"]
+thresholds = EA_THRESHOLDS[receptor_type]
 hazard_index = sum(residual_combined[chain] / thresholds[chain] for chain in pfas_chains)
 
 st.header("📊 PFAS Compliance Check")
@@ -351,15 +351,7 @@ chart_df = pd.DataFrame({
     "Destruction": [pfas_destruction_water, pfas_destruction_soil]
 })
 chart_df_melt = chart_df.melt(id_vars="Category", value_vars=["Removal","Destruction"], var_name="Type", value_name="Cost (£)")
-fig = px.bar(
-    chart_df_melt,
-    x="Category",
-    y="Cost (£)",
-    color="Type",
-    text="Cost (£)",
-    barmode="group",
-    title="PFAS Removal vs Destruction Costs"
-)
+fig = px.bar(chart_df_melt, x="Category", y="Cost (£)", color="Type", text="Cost (£)", barmode="group", title="PFAS Removal vs Destruction Costs")
 fig.update_traces(texttemplate='£%{y:,.0f}', textposition='outside')
 st.plotly_chart(fig, use_container_width=True)
 
