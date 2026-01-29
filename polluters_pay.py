@@ -62,7 +62,7 @@ soil_mass = st.number_input("Soil mass to treat (tonnes)", min_value=0.0, value=
 
 receptor_type = st.radio(
     "Select receptor type (affects threshold):",
-    ["Drinking water", "Surface water / soil"]
+    ["Drinking water", "Environmental / Surface water"]
 )
 
 # PFAS chains inputs
@@ -96,10 +96,18 @@ cost_index = scenario_config["cost_index"]
 # UK PFAS thresholds (EA summary)
 # ======================
 EA_THRESHOLDS = {
-    "PFOA": 0.4,
-    "PFOS": 0.015,
-    "PFHxS": 0.2,
-    "PFNA": 0.3
+    "Drinking water": {
+        "PFOA": 0.4,
+        "PFOS": 0.015,
+        "PFHxS": 0.2,
+        "PFNA": 0.3
+    },
+    "Environmental / Surface water": {
+        "PFOA": 2.0,
+        "PFOS": 0.2,
+        "PFHxS": 0.5,
+        "PFNA": 0.6
+    }
 }
 
 # ======================
@@ -293,7 +301,28 @@ if selected_soil_method:
 # COMPLIANCE CHECK
 # ======================
 residual_combined = {chain: min(residual_water[chain], residual_soil[chain]) for chain in pfas_chains}
-hazard_index = sum(residual_combined[chain]/EA_THRESHOLDS[chain] for chain in pfas_chains)
+thresholds = EA_THRESHOLDS["Drinking water"] if receptor_type == "Drinking water" else EA_THRESHOLDS["Environmental / Surface water"]
+hazard_index = sum(residual_combined[chain] / thresholds[chain] for chain in pfas_chains)
+
+st.header("📊 PFAS Compliance Check")
+st.write(f"Residual PFAS concentrations vs UK {receptor_type} thresholds:")
+
+compliance_table = []
+for chain in pfas_chains:
+    compliant = "✅ Pass" if residual_combined[chain] <= thresholds[chain] else "❌ Exceeds"
+    compliance_table.append({
+        "PFAS Chain": chain,
+        "Residual": residual_combined[chain],
+        "Threshold": thresholds[chain],
+        "Status": compliant
+    })
+
+st.table(pd.DataFrame(compliance_table))
+
+if hazard_index <= 1:
+    st.success(f"✅ Overall hazard index {hazard_index:.2f} ≤ 1 – Meets UK {receptor_type} thresholds")
+else:
+    st.error(f"❌ Overall hazard index {hazard_index:.2f} > 1 – Exceeds UK {receptor_type} thresholds")
 
 # ======================
 # GRAND TOTAL & VISUALS
@@ -312,17 +341,8 @@ color = "red" if scenario.startswith("Conservative") else "green"
 st.markdown(f"<h2 style='color:{color}'>Total Polluter-Pays Cost ({scenario}): £{grand_total:,.0f}</h2>", unsafe_allow_html=True)
 st.table(summary_df.style.format({"Cost (£)": "£{:,.0f}"}))
 
-# Hazard Index Display
-st.header("📊 PFAS Compliance Check")
-st.write("Residual PFAS concentrations (ng/L or µg/kg):")
-st.table(pd.DataFrame([residual_combined]))
-if hazard_index <= 1:
-    st.success(f"✅ Hazard index {hazard_index:.2f} ≤ 1 – Meets UK thresholds")
-else:
-    st.error(f"❌ Hazard index {hazard_index:.2f} > 1 – Exceeds UK thresholds")
-
 # ======================
-# IMPROVED BAR CHARTS
+# BAR CHART
 # ======================
 st.header("📈 Cost Visualization")
 chart_df = pd.DataFrame({
