@@ -16,14 +16,13 @@ if not st.session_state.authenticated:
         "Enter password to access the PFAS Polluter-Pays Calculator",
         type="password"
     )
-
     if password_input == APP_PASSWORD:
         st.session_state.authenticated = True
         st.success("✅ Password correct! You can now use the app.")
     elif password_input:
-        st.warning("❌ Incorrect password. Try again.")
+        st.warning("❌ Incorrect password. Try again")
     else:
-        st.stop()  # Stops only if no password entered yet
+        st.stop()
 
 # ======================
 # BASE DIRECTORY & LOGO
@@ -47,7 +46,10 @@ if os.path.exists(logo_path):
 st.title("PFAS Polluter-Pays Cost–Benefit Calculator")
 st.markdown("""
 Estimate PFAS remediation costs under the **polluter-pays principle**.  
-Costs are separated into **water vs soil** and **PFAS removal vs PFAS destruction**.
+Costs are separated into **water vs soil**, **removal vs destruction**, and **PFAS chain-specific**.  
+
+Guidance & thresholds are aligned with the **UK Environment Agency PFAS thresholds**:  
+[EA PFAS Thresholds Summary](https://www.gov.uk/government/publications/developing-thresholds-for-managing-pfas-in-the-water-environment/developing-thresholds-for-managing-pfas-in-the-water-environment-summary)
 """)
 
 # ======================
@@ -55,145 +57,295 @@ Costs are separated into **water vs soil** and **PFAS removal vs PFAS destructio
 # ======================
 st.header("Site Inputs")
 site_name = st.text_input("Site name", value="My PFAS Site")
+water_volume = st.number_input("Water volume to treat (m³)", min_value=0.0, value=1_000_000.0)
+soil_mass = st.number_input("Soil mass to treat (tonnes)", min_value=0.0, value=10_000.0)
 
-water_volume = st.number_input(
-    "Water volume to treat (m³)",
-    min_value=0.0,
-    value=1_000_000.0
+receptor_type = st.radio(
+    "Select receptor type (affects threshold):",
+    ["Drinking water", "Surface water / soil"]
 )
 
-soil_mass = st.number_input(
-    "Soil mass to treat (tonnes)",
-    min_value=0.0,
-    value=10_000.0
-)
+# PFAS chains inputs
+st.subheader("Influent PFAS concentrations")
+pfas_chains = ["PFOA", "PFOS", "PFHxS", "PFNA"]
+influent_pf = {}
+for chain in pfas_chains:
+    influent_pf[chain] = st.number_input(f"{chain} (ng/L for water / µg/kg for soil)", min_value=0.0, value=10.0)
 
 # ======================
-# COST SCENARIO (single-choice)
+# SCENARIOS
 # ======================
-scenario = st.radio(
-    "Select a cost scenario (pick only one):",
-    ["Conservative (high-end estimate)", "Balanced (most likely estimate)"]
-)
+SCENARIOS = {
+    "Conservative (UK precautionary)": {
+        "cost_index": 1,
+        "allow_removal_only": False,
+        "confidence_factor": 1.3
+    },
+    "Moderate (Risk-based UK)": {
+        "cost_index": 0,
+        "allow_removal_only": True,
+        "confidence_factor": 1.0
+    }
+}
 
-cost_index = 1 if scenario.startswith("Conservative") else 0
+scenario = st.radio("Select a cost scenario:", list(SCENARIOS.keys()))
+scenario_config = SCENARIOS[scenario]
+cost_index = scenario_config["cost_index"]
+
+# ======================
+# UK PFAS thresholds (EA summary)
+# ======================
+EA_THRESHOLDS = {
+    "PFOA": 0.4,
+    "PFOS": 0.015,
+    "PFHxS": 0.2,
+    "PFNA": 0.3
+}
 
 # ======================
 # WATER METHODS
 # ======================
 st.header("💧 Water Treatment Methods")
-st.info("Select **only one method**. The type (Removal / Destruction) is shown next to the method.")
-
 water_methods = {
-    "Granular Activated Carbon (GAC) (Removal)": {"cost": (0.02, 0.06), "type": "Removal"},
-    "Ion Exchange (Removal)": {"cost": (0.03, 0.08), "type": "Removal"},
-    "RO / Nanofiltration (Removal)": {"cost": (0.05, 0.15), "type": "Removal"},
-    "Foam Fractionation (Removal)": {"cost": (0.01, 0.05), "type": "Removal"},
-    "Advanced Oxidation (AOP) (Destruction)": {"cost": (0.10, 0.50), "type": "Destruction"},
-    "Supercritical Water Oxidation (SCWO) (Destruction)": {"cost": (0.20, 1.00), "type": "Destruction"},
-    "Pump-and-Treat + Incineration (Removal)": {"cost": (0.10, 0.20), "type": "Removal"},
-    "Pump-and-Treat + Incineration (Destruction)": {"cost": (0.10, 0.20), "type": "Destruction"},
-    "Electrochemical (Destruction)": {"cost": (0.001, 0.001), "type": "Destruction"}
+    "Granular Activated Carbon (GAC) (Removal – offsite liability)": {
+        "cost": (0.02, 0.08),
+        "type": "Removal",
+        "efficiency": (0.6, 0.9),
+        "pfas_scope": ["PFOA","PFNA","PFOS"],
+        "secondary_waste": True,
+        "waste_form": "spent carbon"
+    },
+    "Ion Exchange (IE) (Removal – offsite liability)": {
+        "cost": (0.03, 0.12),
+        "type": "Removal",
+        "efficiency": (0.7, 0.95),
+        "pfas_scope": ["PFOA","PFNA","PFOS"],
+        "secondary_waste": True,
+        "waste_form": "resin brine"
+    },
+    "RO / Nanofiltration (RO/NF) (Removal – offsite liability)": {
+        "cost": (0.05, 0.20),
+        "type": "Removal",
+        "efficiency": (0.8, 0.99),
+        "pfas_scope": ["PFOA","PFOS","PFHxS","PFNA"],
+        "secondary_waste": True,
+        "waste_form": "concentrate / brine"
+    },
+    "Foam Fractionation (Removal – offsite liability)": {
+        "cost": (0.01, 0.05),
+        "type": "Removal",
+        "efficiency": (0.3, 0.6),
+        "pfas_scope": ["PFOA","PFOS","PFHxS","PFNA"],
+        "secondary_waste": True,
+        "waste_form": "foam / concentrate"
+    },
+    "Advanced Oxidation Process (AOP) (Destruction – mineralisation)": {
+        "cost": (0.15, 1.00),
+        "type": "Destruction",
+        "efficiency": (0.7, 0.99),
+        "pfas_scope": ["PFOA","PFOS","PFHxS","PFNA"],
+        "secondary_waste": False
+    },
+    "Supercritical Water Oxidation (SCWO) (Destruction – mineralisation)": {
+        "cost": (6.80, 25.50),
+        "type": "Destruction",
+        "efficiency": (0.9,1.0),
+        "pfas_scope": ["PFOA","PFOS","PFHxS","PFNA"],
+        "secondary_waste": False
+    },
+    "Pump-and-Treat + Incineration (Removal – offsite liability)": {
+        "cost": (0.10, 0.30),
+        "type": "Removal",
+        "efficiency": (0.5,0.8),
+        "pfas_scope": ["PFOA","PFOS","PFHxS","PFNA"],
+        "secondary_waste": True,
+        "waste_form": "incineration ash"
+    },
+    "Pump-and-Treat + Incineration (Destruction – mineralisation)": {
+        "cost": (0.10, 0.30),
+        "type": "Destruction",
+        "efficiency": (0.7,0.95),
+        "pfas_scope": ["PFOA","PFOS","PFHxS","PFNA"],
+        "secondary_waste": False
+    },
+    "Electrochemical (Destruction – mineralisation, pilot / early deployment)": {
+        "cost": (0.05, 0.20),
+        "type": "Destruction",
+        "efficiency": (0.5,0.95),
+        "pfas_scope": ["PFOA","PFOS","PFHxS","PFNA"],
+        "secondary_waste": False,
+        "technology_readiness": "pilot",
+        "info": "⚠️ Technology at pilot / early deployment stage (e.g., Oxyle client pilots)"
+    }
 }
 
 selected_water_method = st.radio("Choose one water treatment method:", list(water_methods.keys()))
-
-pfas_removal_water = 0
-pfas_destruction_water = 0
-
-if selected_water_method:
-    info = water_methods[selected_water_method]
-    total_cost = info["cost"][cost_index] * water_volume
-    if info["type"] == "Removal":
-        pfas_removal_water += total_cost
-    else:
-        pfas_destruction_water += total_cost
 
 # ======================
 # SOIL METHODS
 # ======================
 st.header("🌱 Soil Treatment Methods")
-st.info("Select **only one method**. The type (Removal / Destruction) is shown next to the method.")
-
 soil_methods = {
-    "Excavate & Incinerate / Landfill (Removal)": {"cost": (50, 200), "type": "Removal"},
-    "Excavate & Incinerate / Landfill (Destruction)": {"cost": (50, 200), "type": "Destruction"},
-    "Soil Washing + SCWO/AOP (Removal)": {"cost": (8, 20), "type": "Removal"},
-    "Soil Washing + SCWO/AOP (Destruction)": {"cost": (8, 20), "type": "Destruction"},
-    "Thermal Desorption (Destruction)": {"cost": (100, 500), "type": "Destruction"},
-    "In-Situ Stabilisation (Removal)": {"cost": (20, 40), "type": "Removal"},
-    "AOP (ex-situ eluate) (Destruction)": {"cost": (0.10, 0.50), "type": "Destruction"}
+    "Excavate & Incinerate (Destruction – mineralisation)": {
+        "cost": (50, 250),
+        "type": "Destruction",
+        "efficiency": (0.9, 1.0),
+        "pfas_scope": ["PFOA","PFOS","PFHxS","PFNA"],
+        "secondary_waste": True,
+        "waste_form": "incineration ash"
+    },
+    "Excavate & Hazardous Landfill (Removal – offsite liability)": {
+        "cost": (50, 250),
+        "type": "Removal",
+        "efficiency": (0.3,0.5),
+        "pfas_scope": ["PFOA","PFOS","PFHxS","PFNA"],
+        "secondary_waste": True,
+        "waste_form": "landfill soil"
+    },
+    "Soil Washing + SCWO/AOP (Removal – offsite liability)": {
+        "cost": (8, 20),
+        "type": "Removal",
+        "efficiency": (0.5,0.8),
+        "pfas_scope": ["PFOA","PFOS","PFHxS","PFNA"],
+        "secondary_waste": True,
+        "waste_form": "eluate"
+    },
+    "Soil Washing + SCWO/AOP (Destruction – mineralisation)": {
+        "cost": (8, 20),
+        "type": "Destruction",
+        "efficiency": (0.7,0.95),
+        "pfas_scope": ["PFOA","PFOS","PFHxS","PFNA"],
+        "secondary_waste": False
+    },
+    "Thermal Desorption (Destruction – mineralisation)": {
+        "cost": (100, 600),
+        "type": "Destruction",
+        "efficiency": (0.8, 1.0),
+        "pfas_scope": ["PFOA","PFOS","PFHxS","PFNA"],
+        "secondary_waste": True,
+        "waste_form": "desorption residues"
+    },
+    "In-Situ Stabilisation (Removal – offsite liability)": {
+        "cost": (20, 80),
+        "type": "Removal",
+        "efficiency": (0.2,0.5),
+        "pfas_scope": ["PFOA","PFOS","PFHxS","PFNA"],
+        "secondary_waste": False
+    },
+    "AOP (ex-situ eluate) (Destruction – mineralisation)": {
+        "cost": (10, 40),
+        "type": "Destruction",
+        "efficiency": (0.7,0.95),
+        "pfas_scope": ["PFOA","PFOS","PFHxS","PFNA"],
+        "secondary_waste": False
+    }
 }
 
 selected_soil_method = st.radio("Choose one soil treatment method:", list(soil_methods.keys()))
 
+# ======================
+# CALCULATIONS
+# ======================
+def calculate_residual(influent_dict, method):
+    residual = {}
+    info = method
+    for chain, conc in influent_dict.items():
+        if chain in info["pfas_scope"]:
+            eff = info["efficiency"][cost_index]
+            residual[chain] = conc * (1 - eff)
+        else:
+            residual[chain] = conc
+    return residual
+
+# Water
+pfas_removal_water = 0
+pfas_destruction_water = 0
+residual_water = influent_pf.copy()
+if selected_water_method:
+    info = water_methods[selected_water_method]
+    residual_water = calculate_residual(influent_pf, info)
+    total_cost = info["cost"][cost_index] * water_volume
+    if info["type"] == "Removal":
+        pfas_removal_water += total_cost
+    else:
+        pfas_destruction_water += total_cost
+    if info.get("secondary_waste"):
+        st.warning(f"⚠️ Water method generates secondary waste: {info['waste_form']}")
+    if info.get("technology_readiness") == "pilot":
+        st.info(info.get("info"))
+
+# Soil
 pfas_removal_soil = 0
 pfas_destruction_soil = 0
-
+residual_soil = influent_pf.copy()
 if selected_soil_method:
     info = soil_methods[selected_soil_method]
+    residual_soil = calculate_residual(influent_pf, info)
     total_cost = info["cost"][cost_index] * soil_mass
     if info["type"] == "Removal":
         pfas_removal_soil += total_cost
     else:
         pfas_destruction_soil += total_cost
+    if info.get("secondary_waste"):
+        st.warning(f"⚠️ Soil method generates secondary waste: {info['waste_form']}")
+
+# ======================
+# COMPLIANCE CHECK
+# ======================
+residual_combined = {chain: min(residual_water[chain], residual_soil[chain]) for chain in pfas_chains}
+hazard_index = sum(residual_combined[chain]/EA_THRESHOLDS[chain] for chain in pfas_chains)
 
 # ======================
 # GRAND TOTAL & VISUALS
 # ======================
-grand_total = (
-    pfas_removal_water +
-    pfas_destruction_water +
-    pfas_removal_soil +
-    pfas_destruction_soil
-)
+grand_total = pfas_removal_water + pfas_destruction_water + pfas_removal_soil + pfas_destruction_soil
 
-if grand_total == 0:
-    st.warning("⚠️ Select at least one treatment method to calculate costs.")
+st.header("💰 Cost Summary")
+summary_df = pd.DataFrame([
+    {"Category": "PFAS Removal from Water", "Cost (£)": pfas_removal_water},
+    {"Category": "PFAS Destruction from Water", "Cost (£)": pfas_destruction_water},
+    {"Category": "PFAS Removal from Soil", "Cost (£)": pfas_removal_soil},
+    {"Category": "PFAS Destruction from Soil", "Cost (£)": pfas_destruction_soil},
+    {"Category": "Grand Total", "Cost (£)": grand_total}
+])
+color = "red" if scenario.startswith("Conservative") else "green"
+st.markdown(f"<h2 style='color:{color}'>Total Polluter-Pays Cost ({scenario}): £{grand_total:,.0f}</h2>", unsafe_allow_html=True)
+st.table(summary_df.style.format({"Cost (£)": "£{:,.0f}"}))
+
+# Hazard Index Display
+st.header("📊 PFAS Compliance Check")
+st.write("Residual PFAS concentrations (ng/L or µg/kg):")
+st.table(pd.DataFrame([residual_combined]))
+if hazard_index <= 1:
+    st.success(f"✅ Hazard index {hazard_index:.2f} ≤ 1 – Meets UK thresholds")
 else:
-    st.header("💰 Cost Summary")
+    st.error(f"❌ Hazard index {hazard_index:.2f} > 1 – Exceeds UK thresholds")
 
-    summary_df = pd.DataFrame([
-        {"Category": "PFAS Removal from Water", "Cost (£)": pfas_removal_water},
-        {"Category": "PFAS Destruction from Water", "Cost (£)": pfas_destruction_water},
-        {"Category": "PFAS Removal from Soil", "Cost (£)": pfas_removal_soil},
-        {"Category": "PFAS Destruction from Soil", "Cost (£)": pfas_destruction_soil},
-        {"Category": "Grand Total", "Cost (£)": grand_total}
-    ])
+# ======================
+# IMPROVED BAR CHARTS
+# ======================
+st.header("📈 Cost Visualization")
+chart_df = pd.DataFrame({
+    "Category": ["Water", "Soil"],
+    "Removal": [pfas_removal_water, pfas_removal_soil],
+    "Destruction": [pfas_destruction_water, pfas_destruction_soil]
+})
+chart_df_melt = chart_df.melt(id_vars="Category", value_vars=["Removal","Destruction"], var_name="Type", value_name="Cost (£)")
+fig = px.bar(
+    chart_df_melt,
+    x="Category",
+    y="Cost (£)",
+    color="Type",
+    text="Cost (£)",
+    barmode="group",
+    title="PFAS Removal vs Destruction Costs"
+)
+fig.update_traces(texttemplate='£%{y:,.0f}', textposition='outside')
+st.plotly_chart(fig, use_container_width=True)
 
-    color = "red" if scenario.startswith("Conservative") else "green"
-    st.markdown(
-        f"<h2 style='color:{color}'>Total Polluter-Pays Cost ({scenario}): £{grand_total:,.0f}</h2>",
-        unsafe_allow_html=True
-    )
-
-    st.table(summary_df.style.format({"Cost (£)": "£{:,.0f}"}))
-
-    # ======================
-    # BAR CHART: Removal vs Destruction
-    # ======================
-    chart_df = pd.DataFrame({
-        "Category": ["Water", "Soil"],
-        "Removal": [pfas_removal_water, pfas_removal_soil],
-        "Destruction": [pfas_destruction_water, pfas_destruction_soil]
-    })
-
-    chart_df_melt = chart_df.melt(id_vars="Category", value_vars=["Removal", "Destruction"],
-                                   var_name="Type", value_name="Cost (£)")
-
-    fig = px.bar(chart_df_melt, x="Category", y="Cost (£)", color="Type", text="Cost (£)",
-                 title="PFAS Removal vs Destruction Costs")
-    st.plotly_chart(fig, use_container_width=True)
-
-    # ======================
-    # CSV download
-    # ======================
-    st.subheader("Download Cost Breakdown CSV")
-    csv = summary_df.to_csv(index=False)
-    st.download_button(
-        "Download CSV",
-        csv,
-        file_name=f"{site_name}_PFAS_Polluter_Pays.csv",
-        mime="text/csv"
-    )
-
+# ======================
+# CSV download
+# ======================
+st.subheader("Download Cost Breakdown CSV")
+csv = summary_df.to_csv(index=False)
+st.download_button("Download CSV", csv, file_name=f"{site_name}_PFAS_Polluter_Pays.csv", mime="text/csv")
