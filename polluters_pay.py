@@ -140,7 +140,7 @@ water_methods = {
     "Electrochemical (Destruction – mineralisation, pilot / early deployment)": {
         "cost": (0.05,0.20), "type":"Destruction", "efficiency":(0.5,0.95),
         "pfas_scope":["PFOA","PFOS","PFHxS","PFNA"], "secondary_waste":False,
-        "technology_readiness":"pilot", "info":"ℹ️ Technology at pilot / early deployment stage (e.g., Oxyle client pilots)"
+        "technology_readiness":"pilot", "info":"ℹ️ Technology at pilot / early deployment stage"
     }
 }
 
@@ -296,3 +296,4 @@ st.plotly_chart(fig, use_container_width=True)
 st.subheader("Download Cost Breakdown CSV")
 csv = summary_df.to_csv(index=False)
 st.download_button("Download CSV", csv, file_name=f"{site_name}_PFAS_Polluter_Pays.csv", mime="text/csv")
+
