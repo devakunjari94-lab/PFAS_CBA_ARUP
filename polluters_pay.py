@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.express as px
 
 # ======================
-# 🔐 PASSWORD PROTECTION
+# 🔐 PASSWORD PROTECTION (STRICT)
 # ======================
 APP_PASSWORD = "ARUPPFASSWS2026"
 
@@ -16,14 +16,17 @@ if not st.session_state.authenticated:
         "Enter password to access the PFAS Polluter-Pays Calculator",
         type="password"
     )
-
-    if password_input == APP_PASSWORD:
-        st.session_state.authenticated = True
-        st.success("✅ Password correct! You can now use the app.")
+    if password_input:
+        if password_input == APP_PASSWORD:
+            st.session_state.authenticated = True
+            st.success("✅ Password correct! You can now use the app.")
+             # No experimental_rerun needed
+        else:
+            st.error("❌ Incorrect password. Access denied.")
+            st.stop()
     else:
-        if password_input:
-            st.warning("❌ Incorrect password. Try again")
-        st.stop()  # Stops all execution until correct password
+        st.info("🔐 Enter the password to continue.")
+        st.stop()
 
 # ======================
 # BASE DIRECTORY & LOGO
@@ -49,7 +52,7 @@ st.markdown("""
 Estimate PFAS remediation costs under the **polluter-pays principle**.  
 Costs are separated into **water vs soil**, **removal vs destruction**, and **PFAS chain-specific**.  
 
-Compliance is checked against **UK Environment Agency PFAS thresholds** for drinking water and environmental/surface water:  
+Guidance & thresholds aligned with **UK Environment Agency PFAS thresholds**:  
 [EA PFAS Thresholds Summary](https://www.gov.uk/government/publications/developing-thresholds-for-managing-pfas-in-the-water-environment/developing-thresholds-for-managing-pfas-in-the-water-environment-summary)
 """)
 
@@ -66,12 +69,24 @@ receptor_type = st.radio(
     ["Drinking water", "Environmental / Surface water"]
 )
 
-# PFAS chains inputs
+# ======================
+# PFAS INPUTS (Chains or General)
+# ======================
 st.subheader("Influent PFAS concentrations")
-pfas_chains = ["PFOA", "PFOS", "PFHxS", "PFNA"]
+
+# Default chains
+default_chains = ["PFOA", "PFOS", "PFHxS", "PFNA"]
+
+use_general = st.checkbox("I do not have chain-specific PFAS data (use general PFAS)")
+pfas_chains = ["General PFAS"] if use_general else default_chains
+
 influent_pf = {}
 for chain in pfas_chains:
-    influent_pf[chain] = st.number_input(f"{chain} (ng/L for water / µg/kg for soil)", min_value=0.0, value=10.0)
+    influent_pf[chain] = st.number_input(
+        f"{chain} concentration (ng/L for water / µg/kg for soil)",
+        min_value=0.0,
+        value=10.0
+    )
 
 # ======================
 # SCENARIOS
@@ -97,8 +112,20 @@ cost_index = scenario_config["cost_index"]
 # UK PFAS thresholds
 # ======================
 EA_THRESHOLDS = {
-    "Drinking water": {"PFOA":0.4, "PFOS":0.015, "PFHxS":0.2, "PFNA":0.3},
-    "Environmental / Surface water": {"PFOA":2.0, "PFOS":0.2, "PFHxS":0.5, "PFNA":0.6}
+    "Drinking water": {
+        "PFOA": 0.4,
+        "PFOS": 0.015,
+        "PFHxS": 0.2,
+        "PFNA": 0.3,
+        "General PFAS": 0.4
+    },
+    "Environmental / Surface water": {
+        "PFOA": 2.0,
+        "PFOS": 0.2,
+        "PFHxS": 0.5,
+        "PFNA": 0.6,
+        "General PFAS": 2.0
+    }
 }
 
 # ======================
@@ -107,44 +134,77 @@ EA_THRESHOLDS = {
 st.header("💧 Water Treatment Methods")
 water_methods = {
     "Granular Activated Carbon (GAC) (Removal – offsite liability)": {
-        "cost": (0.02,0.08), "type":"Removal", "efficiency":(0.6,0.9),
-        "pfas_scope":["PFOA","PFNA","PFOS"], "secondary_waste":True, "waste_form":"spent carbon"
+        "cost": (0.02, 0.08),
+        "type": "Removal",
+        "efficiency": (0.6, 0.9),
+        "pfas_scope": pfas_chains,
+        "secondary_waste": True,
+        "waste_form": "spent carbon"
     },
     "Ion Exchange (IE) (Removal – offsite liability)": {
-        "cost": (0.03,0.12), "type":"Removal", "efficiency":(0.7,0.95),
-        "pfas_scope":["PFOA","PFNA","PFOS"], "secondary_waste":True, "waste_form":"resin brine"
+        "cost": (0.03, 0.12),
+        "type": "Removal",
+        "efficiency": (0.7, 0.95),
+        "pfas_scope": pfas_chains,
+        "secondary_waste": True,
+        "waste_form": "resin brine"
     },
     "RO / Nanofiltration (RO/NF) (Removal – offsite liability)": {
-        "cost": (0.05,0.20), "type":"Removal", "efficiency":(0.8,0.99),
-        "pfas_scope":["PFOA","PFOS","PFHxS","PFNA"], "secondary_waste":True, "waste_form":"concentrate/brine"
+        "cost": (0.05, 0.20),
+        "type": "Removal",
+        "efficiency": (0.8, 0.99),
+        "pfas_scope": pfas_chains,
+        "secondary_waste": True,
+        "waste_form": "concentrate / brine"
     },
     "Foam Fractionation (Removal – offsite liability)": {
-        "cost": (0.01,0.05), "type":"Removal", "efficiency":(0.3,0.6),
-        "pfas_scope":["PFOA","PFOS","PFHxS","PFNA"], "secondary_waste":True, "waste_form":"foam/concentrate"
+        "cost": (0.01, 0.05),
+        "type": "Removal",
+        "efficiency": (0.3, 0.6),
+        "pfas_scope": pfas_chains,
+        "secondary_waste": True,
+        "waste_form": "foam / concentrate"
     },
     "Advanced Oxidation Process (AOP) (Destruction – mineralisation)": {
-        "cost": (0.15,1.00), "type":"Destruction", "efficiency":(0.7,0.99),
-        "pfas_scope":["PFOA","PFOS","PFHxS","PFNA"], "secondary_waste":False
+        "cost": (0.15, 1.00),
+        "type": "Destruction",
+        "efficiency": (0.7, 0.99),
+        "pfas_scope": pfas_chains,
+        "secondary_waste": False
     },
     "Supercritical Water Oxidation (SCWO) (Destruction – mineralisation)": {
-        "cost": (6.8,25.5), "type":"Destruction", "efficiency":(0.9,1.0),
-        "pfas_scope":["PFOA","PFOS","PFHxS","PFNA"], "secondary_waste":False
+        "cost": (6.80, 25.50),
+        "type": "Destruction",
+        "efficiency": (0.9,1.0),
+        "pfas_scope": pfas_chains,
+        "secondary_waste": False
     },
     "Pump-and-Treat + Incineration (Removal – offsite liability)": {
-        "cost": (0.10,0.30), "type":"Removal", "efficiency":(0.5,0.8),
-        "pfas_scope":["PFOA","PFOS","PFHxS","PFNA"], "secondary_waste":True, "waste_form":"incineration ash"
+        "cost": (0.10, 0.30),
+        "type": "Removal",
+        "efficiency": (0.5,0.8),
+        "pfas_scope": pfas_chains,
+        "secondary_waste": True,
+        "waste_form": "incineration ash"
     },
     "Pump-and-Treat + Incineration (Destruction – mineralisation)": {
-        "cost": (0.10,0.30), "type":"Destruction", "efficiency":(0.7,0.95),
-        "pfas_scope":["PFOA","PFOS","PFHxS","PFNA"], "secondary_waste":False
+        "cost": (0.10, 0.30),
+        "type": "Destruction",
+        "efficiency": (0.7,0.95),
+        "pfas_scope": pfas_chains,
+        "secondary_waste": False
     },
     "Electrochemical (Destruction – mineralisation, pilot / early deployment)": {
-        "cost": (0.05,0.20), "type":"Destruction", "efficiency":(0.5,0.95),
-        "pfas_scope":["PFOA","PFOS","PFHxS","PFNA"], "secondary_waste":False,
-        "technology_readiness":"pilot",
-        "info":"⚠️ Technology at pilot / early deployment stage"
+        "cost": (0.05, 0.20),
+        "type": "Destruction",
+        "efficiency": (0.5,0.95),
+        "pfas_scope": pfas_chains,
+        "secondary_waste": False,
+        "technology_readiness": "pilot",
+        "info": "⚠️ Technology at pilot / early deployment stage"
     }
 }
+
 selected_water_method = st.radio("Choose one water treatment method:", list(water_methods.keys()))
 
 # ======================
@@ -153,34 +213,60 @@ selected_water_method = st.radio("Choose one water treatment method:", list(wate
 st.header("🌱 Soil Treatment Methods")
 soil_methods = {
     "Excavate & Incinerate (Destruction – mineralisation)": {
-        "cost": (50,250), "type":"Destruction", "efficiency":(0.9,1.0),
-        "pfas_scope":["PFOA","PFOS","PFHxS","PFNA"], "secondary_waste":True, "waste_form":"incineration ash"
+        "cost": (50, 250),
+        "type": "Destruction",
+        "efficiency": (0.9, 1.0),
+        "pfas_scope": pfas_chains,
+        "secondary_waste": True,
+        "waste_form": "incineration ash"
     },
     "Excavate & Hazardous Landfill (Removal – offsite liability)": {
-        "cost": (50,250), "type":"Removal", "efficiency":(0.3,0.5),
-        "pfas_scope":["PFOA","PFOS","PFHxS","PFNA"], "secondary_waste":True, "waste_form":"landfill soil"
+        "cost": (50, 250),
+        "type": "Removal",
+        "efficiency": (0.3,0.5),
+        "pfas_scope": pfas_chains,
+        "secondary_waste": True,
+        "waste_form": "landfill soil"
     },
     "Soil Washing + SCWO/AOP (Removal – offsite liability)": {
-        "cost": (8,20), "type":"Removal", "efficiency":(0.5,0.8),
-        "pfas_scope":["PFOA","PFOS","PFHxS","PFNA"], "secondary_waste":True, "waste_form":"eluate"
+        "cost": (8, 20),
+        "type": "Removal",
+        "efficiency": (0.5,0.8),
+        "pfas_scope": pfas_chains,
+        "secondary_waste": True,
+        "waste_form": "eluate"
     },
     "Soil Washing + SCWO/AOP (Destruction – mineralisation)": {
-        "cost": (8,20), "type":"Destruction", "efficiency":(0.7,0.95),
-        "pfas_scope":["PFOA","PFOS","PFHxS","PFNA"], "secondary_waste":False
+        "cost": (8, 20),
+        "type": "Destruction",
+        "efficiency": (0.7,0.95),
+        "pfas_scope": pfas_chains,
+        "secondary_waste": False
     },
     "Thermal Desorption (Destruction – mineralisation)": {
-        "cost": (100,600), "type":"Destruction", "efficiency":(0.8,1.0),
-        "pfas_scope":["PFOA","PFOS","PFHxS","PFNA"], "secondary_waste":True, "waste_form":"desorption residues"
+        "cost": (100, 600),
+        "type": "Destruction",
+        "efficiency": (0.8,1.0),
+        "pfas_scope": pfas_chains,
+        "secondary_waste": True,
+        "waste_form": "desorption residues"
     },
     "In-Situ Stabilisation (Removal – offsite liability)": {
-        "cost": (20,80), "type":"Removal", "efficiency":(0.2,0.5),
-        "pfas_scope":["PFOA","PFOS","PFHxS","PFNA"], "secondary_waste":False
+        "cost": (20, 80),
+        "type": "Removal",
+        "efficiency": (0.2,0.5),
+        "pfas_scope": pfas_chains,
+        "secondary_waste": False
     },
     "AOP (ex-situ eluate) (Destruction – mineralisation)": {
-        "cost": (10,40), "type":"Destruction", "efficiency":(0.7,0.95),
-        "pfas_scope":["PFOA","PFOS","PFHxS","PFNA"], "secondary_waste":False
+        "cost": (10, 40),
+        "type": "Destruction",
+        "efficiency": (0.7,0.95),
+        "pfas_scope": pfas_chains,
+        "secondary_waste": False
     }
 }
+
 selected_soil_method = st.radio("Choose one soil treatment method:", list(soil_methods.keys()))
 
 # ======================
@@ -188,15 +274,16 @@ selected_soil_method = st.radio("Choose one soil treatment method:", list(soil_m
 # ======================
 def calculate_residual(influent_dict, method):
     residual = {}
+    info = method
     for chain, conc in influent_dict.items():
-        if chain in method["pfas_scope"]:
-            eff = method["efficiency"][cost_index]
+        if chain in info["pfas_scope"]:
+            eff = info["efficiency"][cost_index]
             residual[chain] = conc * (1 - eff)
         else:
             residual[chain] = conc
     return residual
 
-# Water
+# Water calculation
 pfas_removal_water = 0
 pfas_destruction_water = 0
 residual_water = influent_pf.copy()
@@ -213,7 +300,7 @@ if selected_water_method:
     if info.get("technology_readiness") == "pilot":
         st.info(info.get("info"))
 
-# Soil
+# Soil calculation
 pfas_removal_soil = 0
 pfas_destruction_soil = 0
 residual_soil = influent_pf.copy()
@@ -233,7 +320,7 @@ if selected_soil_method:
 # ======================
 residual_combined = {chain: min(residual_water[chain], residual_soil[chain]) for chain in pfas_chains}
 thresholds = EA_THRESHOLDS[receptor_type]
-hazard_index = sum(residual_combined[chain]/thresholds[chain] for chain in pfas_chains)
+hazard_index = sum(residual_combined[chain] / thresholds[chain] for chain in pfas_chains)
 
 st.header("📊 PFAS Compliance Check")
 st.write(f"Residual PFAS concentrations vs UK {receptor_type} thresholds:")
@@ -247,6 +334,7 @@ for chain in pfas_chains:
         "Threshold": thresholds[chain],
         "Status": compliant
     })
+
 st.table(pd.DataFrame(compliance_table))
 
 if hazard_index <= 1:
@@ -255,30 +343,30 @@ else:
     st.error(f"❌ Overall hazard index {hazard_index:.2f} > 1 – Exceeds UK {receptor_type} thresholds")
 
 # ======================
-# COST SUMMARY & VISUALS
+# GRAND TOTAL & VISUALS
 # ======================
 grand_total = pfas_removal_water + pfas_destruction_water + pfas_removal_soil + pfas_destruction_soil
 
 st.header("💰 Cost Summary")
 summary_df = pd.DataFrame([
-    {"Category":"PFAS Removal from Water", "Cost (£)": pfas_removal_water},
-    {"Category":"PFAS Destruction from Water", "Cost (£)": pfas_destruction_water},
-    {"Category":"PFAS Removal from Soil", "Cost (£)": pfas_removal_soil},
-    {"Category":"PFAS Destruction from Soil", "Cost (£)": pfas_destruction_soil},
-    {"Category":"Grand Total", "Cost (£)": grand_total}
+    {"Category": "PFAS Removal from Water", "Cost (£)": pfas_removal_water},
+    {"Category": "PFAS Destruction from Water", "Cost (£)": pfas_destruction_water},
+    {"Category": "PFAS Removal from Soil", "Cost (£)": pfas_removal_soil},
+    {"Category": "PFAS Destruction from Soil", "Cost (£)": pfas_destruction_soil},
+    {"Category": "Grand Total", "Cost (£)": grand_total}
 ])
 color = "red" if scenario.startswith("Conservative") else "green"
 st.markdown(f"<h2 style='color:{color}'>Total Polluter-Pays Cost ({scenario}): £{grand_total:,.0f}</h2>", unsafe_allow_html=True)
-st.table(summary_df.style.format({"Cost (£)":"£{:,.0f}"}))
+st.table(summary_df.style.format({"Cost (£)": "£{:,.0f}"}))
 
 # ======================
 # BAR CHART
 # ======================
-st.header("📈 Cost Visualisation")
+st.header("📈 Cost Visualization")
 chart_df = pd.DataFrame({
-    "Category":["Water","Soil"],
-    "Removal":[pfas_removal_water,pfas_removal_soil],
-    "Destruction":[pfas_destruction_water,pfas_destruction_soil]
+    "Category": ["Water", "Soil"],
+    "Removal": [pfas_removal_water, pfas_removal_soil],
+    "Destruction": [pfas_destruction_water, pfas_destruction_soil]
 })
 chart_df_melt = chart_df.melt(id_vars="Category", value_vars=["Removal","Destruction"], var_name="Type", value_name="Cost (£)")
 fig = px.bar(chart_df_melt, x="Category", y="Cost (£)", color="Type", text="Cost (£)", barmode="group", title="PFAS Removal vs Destruction Costs")
@@ -286,7 +374,7 @@ fig.update_traces(texttemplate='£%{y:,.0f}', textposition='outside')
 st.plotly_chart(fig, use_container_width=True)
 
 # ======================
-# CSV DOWNLOAD
+# CSV download
 # ======================
 st.subheader("Download Cost Breakdown CSV")
 csv = summary_df.to_csv(index=False)
