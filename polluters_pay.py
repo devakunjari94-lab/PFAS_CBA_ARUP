@@ -73,11 +73,14 @@ receptor_type = st.radio(
 # PFAS CONTAMINATION MAP EMBED
 # ======================
 st.subheader("PFAS Contamination Data Reference")
-st.markdown(
-    "Interactive PDH Map showing PFAS contamination in water and soil. "
-    "Use this map as a reference for typical PFAS concentrations."
-)
-components.iframe("https://pdh.cnrs.fr/en/map/", height=600)
+st.markdown("""
+Interactive PDH Map showing PFAS contamination in water and soil.  
+Use this map as a reference for typical PFAS concentrations.  
+If the map is hard to use on a mobile device, you can also [open it in your browser](https://pdh.cnrs.fr/en/map/).
+""")
+
+# Taller iframe for better mobile visibility
+components.iframe("https://pdh.cnrs.fr/en/map/", height=900)
 
 # ======================
 # PFAS INPUTS (Chains or General)
@@ -397,4 +400,3 @@ st.plotly_chart(fig, use_container_width=True)
 st.subheader("Download Cost Breakdown CSV")
 csv = summary_df.to_csv(index=False)
 st.download_button("Download CSV", csv, file_name=f"{site_name}_PFAS_Polluter_Pays.csv", mime="text/csv")
-
