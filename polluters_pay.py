@@ -2,6 +2,7 @@ import os
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import streamlit.components.v1 as components
 
 # ======================
 # 🔐 PASSWORD PROTECTION (STRICT)
@@ -60,13 +61,6 @@ Guidance & thresholds aligned with **UK Environment Agency PFAS thresholds**:
 # ======================
 st.header("Site Inputs")
 site_name = st.text_input("Site name", value="My PFAS Site")
-
-# PFAS data source link
-st.markdown(
-    "For PFAS contamination data, refer here: "
-    "[PDH Map – PFAS Data](https://pdh.cnrs.fr/en/map/)"
-)
-
 water_volume = st.number_input("Water volume to treat (m³)", min_value=0.0, value=1_000_000.0)
 soil_mass = st.number_input("Soil mass to treat (tonnes)", min_value=0.0, value=10_000.0)
 
@@ -74,6 +68,16 @@ receptor_type = st.radio(
     "Select receptor type (affects threshold):",
     ["Drinking water", "Environmental / Surface water"]
 )
+
+# ======================
+# PFAS CONTAMINATION MAP EMBED
+# ======================
+st.subheader("PFAS Contamination Data Reference")
+st.markdown(
+    "Interactive PDH Map showing PFAS contamination in water and soil. "
+    "Use this map as a reference for typical PFAS concentrations."
+)
+components.iframe("https://pdh.cnrs.fr/en/map/", height=600)
 
 # ======================
 # PFAS INPUTS (Chains or General)
@@ -393,3 +397,4 @@ st.plotly_chart(fig, use_container_width=True)
 st.subheader("Download Cost Breakdown CSV")
 csv = summary_df.to_csv(index=False)
 st.download_button("Download CSV", csv, file_name=f"{site_name}_PFAS_Polluter_Pays.csv", mime="text/csv")
+
