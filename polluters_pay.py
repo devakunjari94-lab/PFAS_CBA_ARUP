@@ -20,7 +20,6 @@ if not st.session_state.authenticated:
         if password_input == APP_PASSWORD:
             st.session_state.authenticated = True
             st.success("✅ Password correct! You can now use the app.")
-             # No experimental_rerun needed
         else:
             st.error("❌ Incorrect password. Access denied.")
             st.stop()
@@ -61,6 +60,13 @@ Guidance & thresholds aligned with **UK Environment Agency PFAS thresholds**:
 # ======================
 st.header("Site Inputs")
 site_name = st.text_input("Site name", value="My PFAS Site")
+
+# PFAS data source link
+st.markdown(
+    "For PFAS contamination data, refer here: "
+    "[PDH Map – PFAS Data](https://pdh.cnrs.fr/en/map/)"
+)
+
 water_volume = st.number_input("Water volume to treat (m³)", min_value=0.0, value=1_000_000.0)
 soil_mass = st.number_input("Soil mass to treat (tonnes)", min_value=0.0, value=10_000.0)
 
@@ -74,7 +80,6 @@ receptor_type = st.radio(
 # ======================
 st.subheader("Influent PFAS concentrations")
 
-# Default chains
 default_chains = ["PFOA", "PFOS", "PFHxS", "PFNA"]
 
 use_general = st.checkbox("I do not have chain-specific PFAS data (use general PFAS)")
@@ -93,19 +98,25 @@ for chain in pfas_chains:
 # ======================
 SCENARIOS = {
     "Conservative (UK precautionary)": {
+        "description": "Higher costs, maximum caution",
         "cost_index": 1,
         "allow_removal_only": False,
         "confidence_factor": 1.3
     },
     "Moderate (Risk-based UK)": {
+        "description": "Expected costs, balanced risk",
         "cost_index": 0,
         "allow_removal_only": True,
         "confidence_factor": 1.0
     }
 }
 
-scenario = st.radio("Select a cost scenario:", list(SCENARIOS.keys()))
-scenario_config = SCENARIOS[scenario]
+scenario_selection = st.radio(
+    "Select a cost scenario:",
+    [f"{k} – {v['description']}" for k, v in SCENARIOS.items()]
+)
+scenario_key = scenario_selection.split(" – ")[0]
+scenario_config = SCENARIOS[scenario_key]
 cost_index = scenario_config["cost_index"]
 
 # ======================
@@ -355,8 +366,11 @@ summary_df = pd.DataFrame([
     {"Category": "PFAS Destruction from Soil", "Cost (£)": pfas_destruction_soil},
     {"Category": "Grand Total", "Cost (£)": grand_total}
 ])
-color = "red" if scenario.startswith("Conservative") else "green"
-st.markdown(f"<h2 style='color:{color}'>Total Polluter-Pays Cost ({scenario}): £{grand_total:,.0f}</h2>", unsafe_allow_html=True)
+color = "red" if scenario_key.startswith("Conservative") else "green"
+st.markdown(
+    f"<h2 style='color:{color}'>Total Polluter-Pays Cost ({scenario_key}: {scenario_config['description']}): £{grand_total:,.0f}</h2>",
+    unsafe_allow_html=True
+)
 st.table(summary_df.style.format({"Cost (£)": "£{:,.0f}"}))
 
 # ======================
