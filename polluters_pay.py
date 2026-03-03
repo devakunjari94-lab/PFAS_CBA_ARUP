@@ -45,11 +45,29 @@ if os.path.exists(logo_path):
     st.image(logo_path, width=150)
 
 st.title("PFAS Polluter-Pays Cost–Benefit Calculator")
+
+# ======================
+# UK PFAS Plan Context
+# ======================
+with st.expander("📘 UK PFAS Plan: Vision for the Future"):
+    st.markdown("""
+The UK Government’s PFAS Plan is a strategic framework for understanding, monitoring, and managing PFAS contamination.  
+
+It includes:
+- Vision for future regulatory standards  
+- Commitment to improved data and thresholds  
+- Engagement with stakeholders  
+
+**Note:** Current numeric thresholds in this calculator are based on UK Environment Agency guidance.  
+Future statutory limits under the PFAS Plan may update these values.  
+
+Read the official PFAS Plan:  
+[PFAS Plan – gov.uk](https://www.gov.uk/government/publications/pfas-plan/pfas-plan-building-a-safer-future-together)
+""")
+
 st.markdown("""
 Estimate PFAS remediation costs under the **polluter-pays principle**.  
 Costs are separated into **water vs soil**, **removal vs destruction**, and **PFAS chain-specific**.
-
-Guidance & thresholds aligned with multiple international jurisdictions.
 """)
 
 # ======================
@@ -93,13 +111,6 @@ jurisdiction = st.selectbox(
 )
 
 # ======================
-# PFAS Map
-# ======================
-with st.expander("🌍 PFAS Contamination Data Reference (PDH Map)"):
-    st.markdown("Interactive PDH Map showing PFAS contamination in water and soil: [PDH Map](https://pdh.cnrs.fr/en/map/)")
-    components.iframe("https://pdh.cnrs.fr/en/map/", height=850)
-
-# ======================
 # PFAS concentrations
 # ======================
 st.subheader("Influent PFAS concentrations")
@@ -119,7 +130,7 @@ for col, chain in zip(cols, pfas_chains):
         influent_pf[chain] = value_input * UNIT_CONVERSION[conc_unit]
 
 # ======================
-# SCENARIOS
+# STEP 2: SCENARIOS
 # ======================
 st.header("Step 2: Select Scenario & Treatment Methods")
 SCENARIOS = {
@@ -143,8 +154,8 @@ THRESHOLDS = {
         "Environmental / Surface water": {"PFOA":2,"PFOS":0.2,"PFHxS":0.5,"PFNA":0.6,"General PFAS":2}
     },
     "EU (Drinking Water Directive)": {
-        "Drinking water": {c:0.1 for c in pfas_chains},  # 0.1 µg/L individual PFAS
-        "Environmental / Surface water": {c:0.5 for c in pfas_chains}  # approximate
+        "Drinking water": {c:0.1 for c in pfas_chains},
+        "Environmental / Surface water": {c:0.5 for c in pfas_chains}
     },
     "Australia (Guideline Values)": {
         "Drinking water": {"PFOA":0.56,"PFOS":0.56,"PFHxS":0.1,"PFNA":0.07,"General PFAS":0.5},
@@ -158,7 +169,7 @@ THRESHOLDS = {
 thresholds = THRESHOLDS[jurisdiction][receptor_type]
 
 # ======================
-# WATER METHODS
+# WATER & SOIL METHODS
 # ======================
 water_methods = {
     "Granular Activated Carbon (GAC) (Removal – offsite liability)": {
@@ -171,9 +182,6 @@ water_methods = {
     }
 }
 
-# ======================
-# SOIL METHODS
-# ======================
 soil_methods = {
     "Excavate & Incinerate (Destruction – mineralisation)": {
         "cost": (50,250),"type":"Destruction","efficiency":(0.9,1.0),
@@ -186,7 +194,7 @@ soil_methods = {
 }
 
 # ======================
-# METHOD SELECTION
+# STEP 2: METHOD SELECTION
 # ======================
 left_col, right_col = st.columns(2)
 with left_col:
@@ -204,7 +212,6 @@ with left_col:
 
 with right_col:
     st.subheader("Compliance Check")
-
     def calc_residual(data, method):
         return {k:v*(1-method["efficiency"][cost_index]) for k,v in data.items()}
 
@@ -212,7 +219,6 @@ with right_col:
     res_soil  = calc_residual(influent_pf, sm_info) if sm_info else influent_pf
     res_combined = {k:min(res_water[k],res_soil[k]) for k in pfas_chains}
 
-    # Hazard Index logic
     table=[]
     hazard=0
     for c in pfas_chains:
@@ -221,10 +227,10 @@ with right_col:
         hazard += r/t
         table.append([c, r, t, "✅ Pass" if r<=t else "❌ Exceeds"])
 
-    # EU sum-of-PFAS logic (example)
+    # EU sum-of-PFAS check
     if jurisdiction.startswith("EU"):
         sum_residual = sum(res_combined.values())
-        if sum_residual > 0.5:  # EU sum threshold in µg/L
+        if sum_residual > 0.5:
             st.warning(f"⚠ Sum-of-PFAS exceeds EU threshold: {sum_residual:.2f} µg/L")
 
     st.table(pd.DataFrame(table, columns=["PFAS","Residual (µg/L)","Threshold (µg/L)","Status"]))
@@ -235,7 +241,7 @@ with right_col:
         st.error(f"Hazard Index {hazard:.2f} — Exceeds")
 
 # ======================
-# COST SUMMARY
+# STEP 3: COST SUMMARY
 # ======================
 cost_water = wm_info["cost"][cost_index]*water_volume if wm_info else 0
 cost_soil  = sm_info["cost"][cost_index]*soil_mass if sm_info else 0
