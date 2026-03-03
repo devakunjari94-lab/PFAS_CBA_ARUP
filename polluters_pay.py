@@ -65,11 +65,6 @@ Read the official PFAS Plan:
 [PFAS Plan – gov.uk](https://www.gov.uk/government/publications/pfas-plan/pfas-plan-building-a-safer-future-together)
 """)
 
-st.markdown("""
-Estimate PFAS remediation costs under the **polluter-pays principle**.  
-Costs are separated into **water vs soil**, **removal vs destruction**, and **PFAS chain-specific**.
-""")
-
 # ======================
 # STEP 1: SITE INPUTS
 # ======================
@@ -169,19 +164,34 @@ THRESHOLDS = {
 thresholds = THRESHOLDS[jurisdiction][receptor_type]
 
 # ======================
-# WATER & SOIL METHODS
+# WATER METHODS
 # ======================
 water_methods = {
     "Granular Activated Carbon (GAC) (Removal – offsite liability)": {
         "cost": (0.02,0.08), "type":"Removal","efficiency":(0.6,0.9),
         "secondary_waste": True, "waste_form":"spent carbon","pfas_scope":pfas_chains
     },
+    "Ion Exchange (IE) (Removal – offsite liability)": {
+        "cost": (0.03,0.12), "type":"Removal","efficiency":(0.7,0.95),
+        "secondary_waste": True, "waste_form":"resin brine","pfas_scope":pfas_chains
+    },
+    "RO / Nanofiltration (RO/NF) (Removal – offsite liability)": {
+        "cost": (0.05,0.20), "type":"Removal","efficiency":(0.8,0.99),
+        "secondary_waste": True, "waste_form":"concentrate / brine","pfas_scope":pfas_chains
+    },
     "Advanced Oxidation Process (AOP) (Destruction – mineralisation)": {
         "cost": (0.15,1.0), "type":"Destruction","efficiency":(0.7,0.99),
+        "secondary_waste": False,"pfas_scope":pfas_chains
+    },
+    "Supercritical Water Oxidation (SCWO) (Destruction – mineralisation)": {
+        "cost": (6.8,25.5), "type":"Destruction","efficiency":(0.9,1.0),
         "secondary_waste": False,"pfas_scope":pfas_chains
     }
 }
 
+# ======================
+# SOIL METHODS
+# ======================
 soil_methods = {
     "Excavate & Incinerate (Destruction – mineralisation)": {
         "cost": (50,250),"type":"Destruction","efficiency":(0.9,1.0),
@@ -190,23 +200,34 @@ soil_methods = {
     "Excavate & Hazardous Landfill (Removal – offsite liability)": {
         "cost": (50,250),"type":"Removal","efficiency":(0.3,0.5),
         "secondary_waste": True,"waste_form":"landfill soil","pfas_scope":pfas_chains
+    },
+    "Soil Washing + SCWO/AOP (Destruction – mineralisation)": {
+        "cost": (8,20),"type":"Destruction","efficiency":(0.7,0.95),
+        "secondary_waste": False,"pfas_scope":pfas_chains
     }
 }
 
 # ======================
-# STEP 2: METHOD SELECTION
+# STEP 2: SIDE-BY-SIDE METHOD SELECTION
 # ======================
 left_col, right_col = st.columns(2)
 with left_col:
+    st.subheader("Treatment Methods")
     if water_volume > 0:
         selected_water_method = st.selectbox("Select Water Treatment Method", list(water_methods.keys()))
         wm_info = water_methods[selected_water_method]
+        st.markdown(f"**Type:** {wm_info['type']} | **Efficiency:** {wm_info['efficiency'][cost_index]*100:.0f}%")
+        if wm_info.get("secondary_waste"):
+            st.info(f"Generates secondary waste: {wm_info['waste_form']}")
     else:
         wm_info = None
 
     if soil_mass > 0:
         selected_soil_method = st.selectbox("Select Soil Treatment Method", list(soil_methods.keys()))
         sm_info = soil_methods[selected_soil_method]
+        st.markdown(f"**Type:** {sm_info['type']} | **Efficiency:** {sm_info['efficiency'][cost_index]*100:.0f}%")
+        if sm_info.get("secondary_waste"):
+            st.info(f"Generates secondary waste: {sm_info['waste_form']}")
     else:
         sm_info = None
 
@@ -227,14 +248,7 @@ with right_col:
         hazard += r/t
         table.append([c, r, t, "✅ Pass" if r<=t else "❌ Exceeds"])
 
-    # EU sum-of-PFAS check
-    if jurisdiction.startswith("EU"):
-        sum_residual = sum(res_combined.values())
-        if sum_residual > 0.5:
-            st.warning(f"⚠ Sum-of-PFAS exceeds EU threshold: {sum_residual:.2f} µg/L")
-
     st.table(pd.DataFrame(table, columns=["PFAS","Residual (µg/L)","Threshold (µg/L)","Status"]))
-
     if hazard <=1:
         st.success(f"Hazard Index {hazard:.2f} — Compliant")
     else:
@@ -267,3 +281,21 @@ st.download_button(
     summary_df.to_csv(index=False),
     file_name=f"{site_name}_PFAS_Polluter_Pays.csv"
 )
+
+# ======================
+# STEP 4: PFAS MAPS
+# ======================
+with st.expander("🌍 PFAS Contamination Maps"):
+    if jurisdiction.startswith("UK") or jurisdiction.startswith("EU"):
+        st.markdown("**EU PFAS Map (PDH Map):** [Open in browser](https://pdh.cnrs.fr/en/map/)")
+        components.iframe("https://pdh.cnrs.fr/en/map/", height=850)
+    elif jurisdiction.startswith("USA"):
+        st.markdown("""
+**USA PFAS Maps:**  
+- EPA PFAS Dashboard: https://www.epa.gov/pfas/pfas-data-dashboard  
+- USGS PFAS Occurrence: https://water.usgs.gov/nawqa/pfas/
+        """)
+    elif jurisdiction.startswith("Australia"):
+        st.markdown("""
+**Australia PFAS Portal:** https://www.pfasportal.org.au/
+        """)
