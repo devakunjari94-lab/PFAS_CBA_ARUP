@@ -2,6 +2,7 @@ import os
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import streamlit.components.v1 as components
 
 # ======================
 # 🔐 PASSWORD PROTECTION
@@ -88,6 +89,24 @@ jurisdiction = st.selectbox(
 # Step 2: PFAS Concentrations
 # ======================
 st.header("Step 2: PFAS Concentrations")
+
+# ----------------------
+# PFAS Map embedded at top
+# ----------------------
+with st.expander("🌍 PFAS Contamination Map"):
+    if jurisdiction.startswith("UK") or jurisdiction.startswith("EU"):
+        st.markdown("EU PFAS Map (PDH Map) embedded below:")
+        components.iframe("https://pdh.cnrs.fr/en/map/", height=600)
+    elif jurisdiction.startswith("USA"):
+        st.markdown("US PFAS Map (EPA Dashboard) embedded below:")
+        components.iframe("https://www.epa.gov/pfas/pfas-data-dashboard", height=600)
+    elif jurisdiction.startswith("Australia"):
+        st.markdown("Australia PFAS Map (PFAS Portal) embedded below:")
+        components.iframe("https://www.pfasportal.org.au/", height=600)
+
+# ----------------------
+# Concentration input
+# ----------------------
 conc_unit = st.selectbox("Concentration unit:", ["ng/L", "µg/L", "mg/L"], index=1)
 UNIT_CONVERSION = {"ng/L":0.001,"µg/L":1,"mg/L":1000}
 
@@ -108,8 +127,8 @@ for col, chain in zip(cols, pfas_chains):
 st.header("Step 3: Treatment Methods")
 
 SCENARIOS = {
-    "Conservative": {"description": "Higher costs, maximum caution", "cost_index": 1},
-    "Moderate": {"description": "Balanced risk and cost", "cost_index": 0}
+    "Conservative (UK precautionary)": {"description": "Higher costs, maximum caution", "cost_index": 1},
+    "Moderate (Risk-based UK)": {"description": "Balanced risk and cost", "cost_index": 0}
 }
 scenario_selection = st.radio(
     "Cost scenario:",
@@ -119,35 +138,51 @@ scenario_selection = st.radio(
 scenario_key = scenario_selection.split(" – ")[0]
 cost_index = SCENARIOS[scenario_key]["cost_index"]
 
+# ----------------------
 # Water methods
+# ----------------------
 water_methods = {
-    "GAC (Removal)": {"cost": (0.02,0.08),"type":"Removal","efficiency":(0.6,0.9),"secondary_waste":True,"waste_form":"spent carbon"},
-    "Ion Exchange (Removal)": {"cost": (0.03,0.12),"type":"Removal","efficiency":(0.7,0.95),"secondary_waste":True,"waste_form":"resin brine"},
-    "RO/NF (Removal)": {"cost": (0.05,0.20),"type":"Removal","efficiency":(0.8,0.99),"secondary_waste":True,"waste_form":"concentrate/brine"},
-    "AOP (Destruction)": {"cost": (0.15,1.0),"type":"Destruction","efficiency":(0.7,0.99),"secondary_waste":False},
-    "SCWO (Destruction)": {"cost": (6.8,25.5),"type":"Destruction","efficiency":(0.9,1.0),"secondary_waste":False}
+    "Granular Activated Carbon (GAC) (Removal – offsite liability)": {"cost":(0.02,0.08),"type":"Removal","efficiency":(0.6,0.9),"secondary_waste":True,"waste_form":"spent carbon"},
+    "Ion Exchange (IE) (Removal – offsite liability)": {"cost":(0.03,0.12),"type":"Removal","efficiency":(0.7,0.95),"secondary_waste":True,"waste_form":"resin brine"},
+    "RO / Nanofiltration (RO/NF) (Removal – offsite liability)": {"cost":(0.05,0.20),"type":"Removal","efficiency":(0.8,0.99),"secondary_waste":True,"waste_form":"concentrate / brine"},
+    "Foam Fractionation (Removal – offsite liability)": {"cost":(0.01,0.05),"type":"Removal","efficiency":(0.3,0.6),"secondary_waste":True,"waste_form":"foam / concentrate"},
+    "Advanced Oxidation Process (AOP) (Destruction – mineralisation)": {"cost":(0.15,1.0),"type":"Destruction","efficiency":(0.7,0.99),"secondary_waste":False},
+    "Supercritical Water Oxidation (SCWO) (Destruction – mineralisation)": {"cost":(6.8,25.5),"type":"Destruction","efficiency":(0.9,1.0),"secondary_waste":False},
+    "Pump-and-Treat + Incineration (Removal – offsite liability)": {"cost":(0.10,0.30),"type":"Removal","efficiency":(0.5,0.8),"secondary_waste":True,"waste_form":"incineration ash"},
+    "Pump-and-Treat + Incineration (Destruction – mineralisation)": {"cost":(0.10,0.30),"type":"Destruction","efficiency":(0.7,0.95),"secondary_waste":False},
+    "Electrochemical (Destruction – mineralisation, pilot / early deployment)": {"cost":(0.05,0.20),"type":"Destruction","efficiency":(0.5,0.95),"secondary_waste":False,"technology_readiness":"pilot","info":"⚠️ Technology at pilot / early deployment stage"}
 }
 
+# ----------------------
 # Soil methods
+# ----------------------
 soil_methods = {
-    "Excavate & Incinerate (Destruction)": {"cost": (50,250),"type":"Destruction","efficiency":(0.9,1.0),"secondary_waste":True,"waste_form":"incineration ash"},
-    "Excavate & Hazardous Landfill (Removal)": {"cost": (50,250),"type":"Removal","efficiency":(0.3,0.5),"secondary_waste":True,"waste_form":"landfill soil"},
-    "Soil Washing + SCWO/AOP (Destruction)": {"cost": (8,20),"type":"Destruction","efficiency":(0.7,0.95),"secondary_waste":False}
+    "Excavate & Incinerate (Destruction – mineralisation)": {"cost":(50,250),"type":"Destruction","efficiency":(0.9,1.0),"secondary_waste":True,"waste_form":"incineration ash"},
+    "Excavate & Hazardous Landfill (Removal – offsite liability)": {"cost":(50,250),"type":"Removal","efficiency":(0.3,0.5),"secondary_waste":True,"waste_form":"landfill soil"},
+    "Soil Washing + SCWO/AOP (Removal – offsite liability)": {"cost":(8,20),"type":"Removal","efficiency":(0.5,0.8),"secondary_waste":True,"waste_form":"eluate"},
+    "Soil Washing + SCWO/AOP (Destruction – mineralisation)": {"cost":(8,20),"type":"Destruction","efficiency":(0.7,0.95),"secondary_waste":False},
+    "Thermal Desorption (Destruction – mineralisation)": {"cost":(100,600),"type":"Destruction","efficiency":(0.8,1.0),"secondary_waste":True,"waste_form":"desorption residues"},
+    "In-Situ Stabilisation (Removal – offsite liability)": {"cost":(20,80),"type":"Removal","efficiency":(0.2,0.5),"secondary_waste":False},
+    "AOP (ex-situ eluate) (Destruction – mineralisation)": {"cost":(10,40),"type":"Destruction","efficiency":(0.7,0.95),"secondary_waste":False}
 }
 
+# ======================
+# Step 3a: Method Selection UI
+# ======================
 left_col, right_col = st.columns(2)
 with left_col:
     if water_volume > 0:
-        selected_water_method = st.selectbox("Select Water Method", list(water_methods.keys()))
+        selected_water_method = st.selectbox("Select Water Treatment Method", list(water_methods.keys()))
         wm_info = water_methods[selected_water_method]
         st.markdown(f"**Type:** {wm_info['type']} | **Efficiency:** {wm_info['efficiency'][cost_index]*100:.0f}%")
         if wm_info.get("secondary_waste"):
             st.info(f"Generates secondary waste: {wm_info['waste_form']}")
+        if wm_info.get("technology_readiness") == "pilot":
+            st.warning(wm_info.get("info"))
     else:
         wm_info = None
-
     if soil_mass > 0:
-        selected_soil_method = st.selectbox("Select Soil Method", list(soil_methods.keys()))
+        selected_soil_method = st.selectbox("Select Soil Treatment Method", list(soil_methods.keys()))
         sm_info = soil_methods[selected_soil_method]
         st.markdown(f"**Type:** {sm_info['type']} | **Efficiency:** {sm_info['efficiency'][cost_index]*100:.0f}%")
         if sm_info.get("secondary_waste"):
@@ -167,7 +202,6 @@ THRESHOLDS = {
     "Australia (Guideline Values)": {"Drinking water":{"PFOA":0.56,"PFOS":0.56,"PFHxS":0.1,"PFNA":0.07,"General PFAS":0.5},"Environmental / Surface water":{"PFOA":2,"PFOS":0.2,"PFHxS":0.5,"PFNA":0.6,"General PFAS":2}},
     "USA (EPA 2024 MCLs)": {"Drinking water":{"PFOA":0.004,"PFOS":0.004,"PFHxS":0.02,"PFNA":0.02,"General PFAS":0.01},"Environmental / Surface water":{"PFOA":0.01,"PFOS":0.01,"PFHxS":0.05,"PFNA":0.05,"General PFAS":0.02}}
 }
-
 thresholds = THRESHOLDS[jurisdiction][receptor_type]
 
 def calc_residual(data, method):
@@ -176,19 +210,19 @@ def calc_residual(data, method):
     return data
 
 res_water = calc_residual(influent_pf, wm_info)
-res_soil  = calc_residual(influent_pf, sm_info)
-res_combined = {k:min(res_water[k], res_soil[k]) for k in pfas_chains}
+res_soil = calc_residual(influent_pf, sm_info)
+res_combined = {k:min(res_water[k],res_soil[k]) for k in pfas_chains}
 
 table=[]
 hazard=0
 for c in pfas_chains:
-    r=res_combined[c]
-    t=thresholds[c]
-    hazard+=r/t
-    table.append([c, r, t, "✅ Pass" if r<=t else "❌ Exceeds"])
+    r = res_combined[c]
+    t = thresholds[c]
+    hazard += r/t
+    table.append([c,r,t,"✅ Pass" if r<=t else "❌ Exceeds"])
 
 st.table(pd.DataFrame(table, columns=["PFAS","Residual (µg/L)","Threshold (µg/L)","Status"]))
-if hazard <=1:
+if hazard<=1:
     st.success(f"Hazard Index {hazard:.2f} — Compliant")
 else:
     st.error(f"Hazard Index {hazard:.2f} — Exceeds")
@@ -216,18 +250,4 @@ with st.expander("📈 Cost Visualization"):
 
 st.download_button("Download Cost CSV", summary_df.to_csv(index=False), file_name=f"{site_name}_PFAS_Polluter_Pays.csv")
 
-# ======================
-# Step 6: PFAS Maps & Resources
-# ======================
-st.header("Step 6: PFAS Maps & Resources")
-st.markdown("Use the following reliable links to view PFAS contamination maps:")
-
-if jurisdiction.startswith("UK") or jurisdiction.startswith("EU"):
-    st.markdown("- **EU PFAS Map (PDH Map):** [https://pdh.cnrs.fr/en/map/](https://pdh.cnrs.fr/en/map/)")
-if jurisdiction.startswith("USA"):
-    st.markdown("- **USA EPA PFAS Dashboard:** [https://www.epa.gov/pfas/pfas-data-dashboard](https://www.epa.gov/pfas/pfas-data-dashboard)")
-if jurisdiction.startswith("Australia"):
-    st.markdown("- **Australia PFAS Portal:** [https://www.pfasportal.org.au/](https://www.pfasportal.org.au/)")
-
-st.info("Interactive maps may require external browser. Click links to view.")
 
