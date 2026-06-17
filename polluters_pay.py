@@ -4,18 +4,18 @@ import plotly.express as px
 import streamlit.components.v1 as components
 
 # ======================
-# 🔐 PASSWORD PROTECTION
+# 🔐 PASSWORD
 # ======================
 PASSWORD = "PFAS2026"
 
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
+if "auth" not in st.session_state:
+    st.session_state.auth = False
 
-if not st.session_state.authenticated:
-    pw = st.text_input("Enter password to access the tool", type="password")
+if not st.session_state.auth:
+    pw = st.text_input("Enter password", type="password")
     if pw:
         if pw == PASSWORD:
-            st.session_state.authenticated = True
+            st.session_state.auth = True
             st.success("✅ Access granted")
         else:
             st.error("❌ Incorrect password")
@@ -30,80 +30,77 @@ st.set_page_config(layout="wide")
 st.title("PFAS Polluter-Pays Decision Support Tool")
 
 # ======================
-# 🔴 MODEL EXPLANATION
+# MODEL EXPLANATION
 # ======================
-with st.expander("📚 Cost Methodology (EPA Adaptation)"):
+with st.expander("📚 Cost Methodology (EPA-based)"):
     st.markdown("""
-This tool uses:
+This tool is based on:
 
 - US EPA Work Breakdown Structure (WBS) cost models  
 - Industry PFAS treatment data  
 - Engineering scaling assumptions  
 
-EPA does not provide fixed £/m³ costs — instead, it calculates costs based on:
-- flow rate
-- system design
-- operating conditions [1](https://sustainabilityservices.eurofins.com/news/2025-pfas-regulations-the-global-landscape/)  
+EPA does **not provide fixed costs**.  
+Instead, it calculates cost based on:
 
-PFAS costs vary widely depending on site-specific factors [2](https://www.lathropgpm.com/insights/epa-moves-to-address-pfas-discharges-under-clean-water-act-ahead-of-new-administration/)  
+- flow rate  
+- system design  
+- operation and maintenance [1](https://sustainabilityservices.eurofins.com/news/2025-pfas-regulations-the-global-landscape/)  
 
-This tool converts that into:
-- P50 (expected)
-- P90 (conservative)
+PFAS treatment costs vary significantly by site conditions [2](https://www.lathropgpm.com/insights/epa-moves-to-address-pfas-discharges-under-clean-water-act-ahead-of-new-administration/)  
 
-✅ For screening-level decision making  
-❌ Not for detailed design or regulatory submissions  
+This tool simplifies this into P50 / P90 estimates.
 """)
 
 # ======================
-# STEP 1: SITE DATA
+# STEP 1
 # ======================
 st.header("Step 1: Site Information")
 
 col1, col2 = st.columns(2)
 water_volume = col1.number_input("Water Volume (m³)", value=1_000_000.0)
-soil_mass = col2.number_input("Soil Mass (tonnes)", value=10_000.0)
+soil_mass = col2.number_input("Soil Mass (tonnes)", value=10000.0)
 
 # ======================
-# STEP 2: PFAS DATA
+# STEP 2
 # ======================
-st.header("Step 2: PFAS Contamination")
+st.header("Step 2: PFAS Data")
 
 with st.expander("🌍 PFAS Map"):
     components.iframe("https://pdh.cnrs.fr/en/map/", height=400)
 
 chains = ["PFOA","PFOS","PFHxS","PFNA"]
-
 influent = {}
+
 for c in chains:
     influent[c] = st.number_input(f"{c} (µg/L)", value=10.0)
 
 # ======================
-# STEP 3: FLOW
+# STEP 3
 # ======================
 st.header("Step 3: Flow Rate")
 
 flow_rate = st.number_input("Flow rate (m³/day)", value=5000.0)
 duration = water_volume / flow_rate if flow_rate > 0 else 0
 
-st.info(f"Duration = Volume / Flow = {duration:.0f} days")
+st.info(f"Estimated duration: {duration:.0f} days")
 
 # ======================
 # SCENARIO
 # ======================
-scenario = st.radio("Cost Scenario", ["P50 (Expected)", "P90 (Conservative)"])
+scenario = st.radio("Scenario", ["P50 (Expected)", "P90 (Conservative)"])
 cost_key = "P50" if "P50" in scenario else "P90"
-eff_idx = 0 if cost_key == "P50" else 1
+eff_idx = 0 if cost_key=="P50" else 1
 
 # ======================
 # METHODS
 # ======================
 water_methods = {
-    "GAC": {"P50":0.04,"P90":0.08,"eff":(0.7,0.9),"type":"Removal"},
-    "Ion Exchange": {"P50":0.06,"P90":0.12,"eff":(0.75,0.95),"type":"Removal"},
-    "RO": {"P50":0.12,"P90":0.25,"eff":(0.9,0.99),"type":"Removal"},
-    "AOP": {"P50":0.5,"P90":1.2,"eff":(0.7,0.99),"type":"Destruction"},
-    "SCWO": {"P50":8,"P90":20,"eff":(0.95,1.0),"type":"Destruction"}
+    "GAC": {"P50":0.04,"P90":0.08,"eff":(0.7,0.9)},
+    "Ion Exchange": {"P50":0.06,"P90":0.12,"eff":(0.75,0.95)},
+    "RO": {"P50":0.12,"P90":0.25,"eff":(0.9,0.99)},
+    "AOP": {"P50":0.5,"P90":1.2,"eff":(0.7,0.99)},
+    "SCWO": {"P50":8,"P90":20,"eff":(0.95,1.0)}
 }
 
 soil_methods = {
@@ -112,12 +109,12 @@ soil_methods = {
 }
 
 # ======================
-# STEP 4: SELECT METHODS
+# SELECT METHODS
 # ======================
 st.header("Step 4: Treatment Selection")
 
-water_sel = st.multiselect("Water Treatment Methods", list(water_methods.keys()))
-soil_sel = st.multiselect("Soil Treatment Methods", list(soil_methods.keys()))
+water_sel = st.multiselect("Water Methods", list(water_methods.keys()))
+soil_sel = st.multiselect("Soil Methods", list(soil_methods.keys()))
 
 # ======================
 # MASS BALANCE
@@ -127,15 +124,15 @@ remaining = mass_in.copy()
 
 treatment_cost = 0
 
-st.header("🔧 Method Calculations (Full Transparency)")
+st.header("🔧 Method Calculations (Transparency)")
 
 for m in water_sel:
     data = water_methods[m]
 
     unit_cost = data[cost_key]
     eff = data["eff"][eff_idx]
-
     cost = unit_cost * water_volume
+
     treatment_cost += cost
 
     for k in remaining:
@@ -143,35 +140,22 @@ for m in water_sel:
 
     st.markdown(f"## {m}")
 
-    with st.expander(f"📐 {m} Detailed Calculation"):
+    with st.expander(f"📐 {m} Calculation"):
         st.markdown(f"""
-### Cost Equation
 Cost = Unit Cost × Volume  
 
 = {unit_cost} × {water_volume:,}  
 = **£{cost:,.0f}**
 
-### PFAS Removal
-Remaining = Initial × (1 − {eff*100:.1f}%)
+Efficiency = {eff*100:.1f}%  
 
-### CAPEX Drivers
-- Equipment sizing (depends on flow)
-- Tanks / membranes / reactors
+Remaining PFAS = Initial × (1 − Efficiency)
 
-### OPEX Drivers
-- Energy consumption
-- Media replacement (GAC, IX)
-- Maintenance
-
-### Source
-Derived from EPA WBS cost modelling approach  
-(flow → design → cost) [1](https://sustainabilityservices.eurofins.com/news/2025-pfas-regulations-the-global-landscape/)  
-
-PFAS costs vary based on site and design [2](https://www.lathropgpm.com/insights/epa-moves-to-address-pfas-discharges-under-clean-water-act-ahead-of-new-administration/)  
+Derived using EPA WBS approach  
 """)
 
 # ======================
-# SOIL COST
+# SOIL
 # ======================
 soil_cost = 0
 
@@ -184,15 +168,8 @@ for m in soil_sel:
 
     with st.expander(f"📐 {m} Calculation"):
         st.markdown(f"""
-Cost = Unit × Soil Mass  
-
-= {unit} × {soil_mass:,}  
+Cost = {unit} × {soil_mass:,}  
 = **£{cost:,.0f}**
-
-Based on remediation cost ranges:
-- excavation
-- transport
-- disposal
 """)
 
 # ======================
@@ -200,10 +177,10 @@ Based on remediation cost ranges:
 # ======================
 capex = flow_rate * 200
 opex = treatment_cost * duration * 0.01
-waste_cost = water_volume * 0.05 * 250
-monitoring_cost = 50000
+waste = water_volume * 0.05 * 250
+monitoring = 50000
 
-total_cost = capex + opex + waste_cost + monitoring_cost + soil_cost
+total_cost = capex + opex + waste + monitoring + soil_cost
 
 # ======================
 # RESULTS
@@ -212,7 +189,7 @@ total_in = sum(mass_in.values())
 total_out = sum(remaining.values())
 removed = total_in - total_out
 
-final_conc = (total_out * 1e9) / water_volume
+final_conc = (total_out*1e9)/water_volume
 
 st.header("Step 5: Results")
 
@@ -220,30 +197,56 @@ st.metric("PFAS Removed (kg)", f"{removed:.2f}")
 st.metric("Final Concentration (µg/L)", f"{final_conc:.4f}")
 
 # ======================
-# HAZARD INDEX
+# ✅ COMPLIANCE CHECK (NEW)
 # ======================
+st.header("Step 6: Compliance Check")
+
+THRESHOLDS = {
+    "Drinking water": {"PFOA":0.004,"PFOS":0.004,"PFHxS":0.02,"PFNA":0.02},
+    "Surface water": {"PFOA":0.1,"PFOS":0.05,"PFHxS":0.1,"PFNA":0.1},
+    "Wastewater": {"PFOA":1.0,"PFOS":0.5,"PFHxS":1.0,"PFNA":1.0}
+}
+
+receptor = st.selectbox("Receptor", list(THRESHOLDS.keys()))
+limits = THRESHOLDS[receptor]
+
+rows = []
 hazard = 0
+
 for k in chains:
     conc = remaining[k]*1e9/water_volume
-    limit = 0.5
-    hazard += conc/limit
+    limit = limits[k]
+
+    ratio = conc/limit
+    hazard += ratio
+
+    status = "✅ Pass" if conc <= limit else "❌ Exceeds"
+
+    rows.append([k, conc, limit, ratio, status])
+
+df = pd.DataFrame(rows, columns=["PFAS","Value","Limit","Ratio","Status"])
+st.table(df)
 
 st.metric("Hazard Index", f"{hazard:.2f}")
 
-with st.expander("ℹ What is Hazard Index?"):
+if hazard <= 1:
+    st.success("✅ Overall Compliant")
+else:
+    st.error("❌ Not Compliant")
+
+with st.expander("ℹ Hazard Index Explanation"):
     st.markdown("""
 Hazard Index = Σ (Concentration / Limit)
 
-≤1 = compliant  
->1 = risk  
-
-Used to assess combined PFAS impact.
+Used to assess cumulative PFAS risk:
+- ≤1 → acceptable
+- >1 → risk
 """)
 
 # ======================
 # COST SUMMARY
 # ======================
-st.header("Step 6: Cost Summary")
+st.header("Step 7: Cost Summary")
 
 col1,col2,col3 = st.columns(3)
 col1.metric("CAPEX", f"£{capex:,.0f}")
@@ -251,33 +254,28 @@ col2.metric("OPEX", f"£{opex:,.0f}")
 col3.metric("Total Cost", f"£{total_cost:,.0f}")
 
 if removed > 0:
-    st.metric("Cost per kg removed", f"£{total_cost/removed:,.0f}")
+    st.metric("£ per kg removed", f"£{total_cost/removed:,.0f}")
 
 # ======================
-# FULL CALCULATION PROOF
+# PROOF
 # ======================
 with st.expander("📐 Full Calculation Breakdown"):
     st.markdown(f"""
 Mass = Conc × Volume / 1e9  
 
 CAPEX = Flow × 200 = £{capex:,.0f}  
+OPEX = Treatment × Duration × 1% = £{opex:,.0f}  
+Waste = 5% × Volume × 250 = £{waste:,.0f}  
 
-OPEX ≈ Treatment × Duration × 1% = £{opex:,.0f}  
-
-Waste = 5% × Volume × 250 = £{waste_cost:,.0f}  
-
-Monitoring = £{monitoring_cost:,.0f}  
-
-Total Cost = £{total_cost:,.0f}
+Total = £{total_cost:,.0f}
 """)
 
 # ======================
-# VISUAL
+# CHART
 # ======================
-df = pd.DataFrame({
-    "Category":["CAPEX","OPEX","Waste","Soil"],
-    "Cost":[capex,opex,waste_cost,soil_cost]
+df_cost = pd.DataFrame({
+    "Type":["CAPEX","OPEX","Waste","Soil"],
+    "Cost":[capex,opex,waste,soil_cost]
 })
 
-fig = px.bar(df, x="Category", y="Cost", text="Cost")
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(px.bar(df_cost, x="Type", y="Cost", text="Cost"), use_container_width=True)
