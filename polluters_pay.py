@@ -1,11 +1,11 @@
-import os
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import streamlit.components.v1 as components
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
 
 # ======================
-# 🔐 PASSWORD
+# PASSWORD
 # ======================
 PASSWORD = "PFAS2026"
 
@@ -14,264 +14,150 @@ if "auth" not in st.session_state:
 
 if not st.session_state.auth:
     pw = st.text_input("Enter password", type="password")
-    if pw:
-        if pw == PASSWORD:
-            st.session_state.auth = True
-            st.success("✅ Access granted")
-        else:
-            st.error("❌ Incorrect password")
-            st.stop()
+    if pw == PASSWORD:
+        st.session_state.auth = True
+        st.success("✅ Access granted")
     else:
         st.stop()
 
 # ======================
-# LOGO
+# TITLE
 # ======================
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-logo_path = os.path.join(BASE_DIR, "arup_logo.png")
-
-if os.path.exists(logo_path):
-    st.image(logo_path, width=150)
+st.title("PFAS Decision Support Tool (Consultancy Version)")
 
 # ======================
-# TITLE + INTRO
+# INPUTS
 # ======================
-st.title("PFAS Polluter-Pays Cost & Decision Support Tool")
+st.header("1. Site Data")
 
-with st.expander("⚠️ Important – Model Scope & Use"):
-    st.markdown("""
-This tool provides **screening-level estimates** for PFAS treatment performance and cost.  
+water_volume = st.number_input("Water Volume (m³)", value=1_000_000.0)
+flow_rate = st.number_input("Flow Rate (m³/day)", value=5000.0)
 
-### ✅ Suitable for:
-- Early-stage feasibility studies  
-- Comparing treatment options  
-- Order-of-magnitude cost estimation  
+duration = water_volume / flow_rate if flow_rate > 0 else 0
 
-### ❌ Not suitable for:
-- Detailed engineering design  
-- Contractor pricing  
-- Regulatory submissions  
+# PFAS input
+use_general = st.checkbox("Use General PFAS")
 
----
-
-### 📊 Key Assumptions:
-- Based on **EPA engineering cost models (WBS approach)**  
-- Uses **P50 (expected)** and **P90 (conservative)** scenarios  
-- Simplifies real-world system behaviour  
-
-PFAS treatment costs depend strongly on:
-- flow rate  
-- water chemistry  
-- PFAS composition  
-- system design  
-
-👉 Results should always be validated with site-specific data.
-""")
-
-# ======================
-# STEP 1
-# ======================
-st.header("Step 1: Site Information")
-
-col1, col2 = st.columns(2)
-water_volume = col1.number_input("Water Volume (m³)", value=1_000_000.0)
-soil_mass = col2.number_input("Soil Mass (tonnes)", value=10000.0)
-
-# ======================
-# STEP 2 PFAS
-# ======================
-st.header("Step 2: PFAS Data")
-
-with st.expander("🌍 PFAS Map"):
-    components.iframe("https://pdh.cnrs.fr/en/map/", height=400)
-
-use_general = st.checkbox("Use General PFAS only")
-
-if use_general:
-    chains = ["General PFAS"]
-else:
-    chains = ["PFOA","PFOS","PFHxS","PFNA"]
+chains = ["General PFAS"] if use_general else ["PFOA","PFOS","PFHxS","PFNA"]
 
 influent = {}
 for c in chains:
-    influent[c] = st.number_input(f"{c} (µg/L)", value=10.0)
-
-# ======================
-# STEP 3 FLOW
-# ======================
-st.header("Step 3: Flow")
-
-flow_rate = st.number_input("Flow rate (m³/day)", value=5000.0)
-duration = water_volume / flow_rate if flow_rate > 0 else 0
-
-st.info(f"Estimated duration: {duration:.0f} days")
-
-# ======================
-# SCENARIO
-# ======================
-scenario = st.radio("Scenario", ["P50","P90"])
-cost_key = scenario
-eff_idx = 0 if scenario == "P50" else 1
+    influent[c] = st.number_input(f"{c} (µg/L)", 10.0)
 
 # ======================
 # METHODS
 # ======================
-water_methods = {
-    "GAC":{"P50":0.04,"P90":0.08,"eff":(0.7,0.9)},
-    "Ion Exchange":{"P50":0.06,"P90":0.12,"eff":(0.75,0.95)},
-    "RO":{"P50":0.12,"P90":0.25,"eff":(0.9,0.99)},
-    "AOP":{"P50":0.5,"P90":1.2,"eff":(0.7,0.99)},
-    "SCWO":{"P50":8,"P90":20,"eff":(0.95,1.0)}
-}
-
-soil_methods = {
-    "Excavate & Incinerate":{"P50":150,"P90":300},
-    "Landfill":{"P50":80,"P90":200},
-    "Soil Washing":{"P50":50,"P90":120}
+methods = {
+    "GAC": {"cost":0.04,"eff":0.7},
+    "IX": {"cost":0.06,"eff":0.8},
+    "RO": {"cost":0.12,"eff":0.95},
+    "AOP": {"cost":0.5,"eff":0.85}
 }
 
 # ======================
-# STEP 4 SELECT
+# SCENARIO COMPARISON
 # ======================
-st.header("Step 4: Treatment Selection")
+st.header("2. Scenario Comparison")
 
-water_sel = st.multiselect("Water Treatment Methods", list(water_methods.keys()))
-soil_sel = st.multiselect("Soil Treatment Methods", list(soil_methods.keys()))
+scenarios = st.multiselect("Select Scenarios", list(methods.keys()))
 
-# ======================
-# MASS BALANCE
-# ======================
-mass_in = {k:(v*water_volume)/1e9 for k,v in influent.items()}
-remaining = mass_in.copy()
+results_table = []
 
-treatment_cost = 0
+for m in scenarios:
+    data = methods[m]
 
-st.header("🔧 Treatment Calculations")
+    # mass
+    mass = sum([v * water_volume / 1e9 for v in influent.values()])
+    remaining = mass * (1 - data["eff"])
 
-for m in water_sel:
-    data = water_methods[m]
+    final_conc = remaining * 1e9 / water_volume
+    cost = data["cost"] * water_volume
 
-    unit_cost = data[cost_key]
-    eff = data["eff"][eff_idx]
-    cost = unit_cost * water_volume
+    compliant = final_conc < 0.1
 
-    treatment_cost += cost
+    results_table.append([m, final_conc, cost, "✅" if compliant else "❌"])
 
-    for k in remaining:
-        remaining[k] *= (1-eff)
+df_scen = pd.DataFrame(results_table, columns=["Method","Final Conc","Cost","Compliance"])
 
-    st.markdown(f"### {m}")
-
-    with st.expander("📐 Method Details"):
-        st.markdown(f"""
-Cost = {unit_cost} × {water_volume:,} = £{cost:,.0f}  
-
-Efficiency = {eff*100:.1f}%  
-
-Remaining = Initial × (1 − Efficiency)
-""")
+st.table(df_scen)
 
 # ======================
-# SOIL COST
+# MAIN SELECTED
 # ======================
-soil_cost = 0
+st.header("3. Detailed Analysis")
 
-for m in soil_sel:
-    unit = soil_methods[m][cost_key]
-    cost = unit * soil_mass
-    soil_cost += cost
+selected = st.selectbox("Select Method", list(methods.keys()))
 
-    st.markdown(f"### {m} (Soil)")
+data = methods[selected]
 
-    with st.expander("📐 Soil Calculation"):
-        st.markdown(f"""
-Cost = {unit} × {soil_mass:,} = £{cost:,.0f}  
+mass = sum([v * water_volume / 1e9 for v in influent.values()])
+remaining = mass * (1 - data["eff"])
+final_conc = remaining * 1e9 / water_volume
 
-Includes:
-- excavation  
-- transport  
-- disposal  
-""")
+treatment_cost = data["cost"] * water_volume
+
+# full cost model
+capex = flow_rate * 200
+opex = treatment_cost * duration * 0.01
+waste = water_volume * 0.05 * 250
+
+total_cost = capex + opex + waste
 
 # ======================
 # RESULTS
 # ======================
-total_in = sum(mass_in.values())
-total_out = sum(remaining.values())
-removed = total_in - total_out
-final_conc = (total_out*1e9)/water_volume
-
-st.header("Step 5: Results")
-
-st.metric("PFAS Removed (kg)", f"{removed:.2f}")
 st.metric("Final Concentration (µg/L)", f"{final_conc:.4f}")
+st.metric("Total Cost", f"£{total_cost:,.0f}")
 
 # ======================
 # COMPLIANCE
 # ======================
-st.header("Step 6: Compliance")
+limit = 0.1  # simple
+ratio = final_conc / limit
 
-THRESHOLDS = {
-    "Drinking water":{"PFOA":0.004,"PFOS":0.004,"PFHxS":0.02,"PFNA":0.02,"General PFAS":0.1},
-    "Surface water":{"PFOA":0.1,"PFOS":0.05,"PFHxS":0.1,"PFNA":0.1,"General PFAS":0.5},
-    "Wastewater":{"PFOA":1.0,"PFOS":0.5,"PFHxS":1.0,"PFNA":1.0,"General PFAS":2.0}
-}
+st.metric("Compliance Ratio", f"{ratio:.2f}")
 
-receptor = st.selectbox("Receptor", list(THRESHOLDS.keys()))
-limits = THRESHOLDS[receptor]
-
-rows = []
-hazard = 0
-
-for k in chains:
-    conc = remaining[k]*1e9/water_volume
-    limit = limits.get(k, list(limits.values())[0])
-
-    ratio = conc/limit
-    hazard += ratio
-
-    status = "✅ Pass" if conc <= limit else "❌ Exceeds"
-
-    rows.append([k, conc, limit, ratio, status])
-
-st.table(pd.DataFrame(rows, columns=["PFAS","Result","Limit","Ratio","Status"]))
-
-st.metric("Hazard Index", f"{hazard:.2f}")
-
-if hazard <= 1:
+if ratio <= 1:
     st.success("✅ Compliant")
 else:
     st.error("❌ Not Compliant")
 
 # ======================
-# COST MODEL
-# ======================
-capex = flow_rate * 200
-opex = treatment_cost * duration * 0.01
-waste = water_volume * 0.05 * 250
-monitoring = 50000
-
-total_cost = capex + opex + waste + monitoring + soil_cost
-
-# ======================
-# COST
-# ======================
-st.header("Step 7: Cost Summary")
-
-col1,col2,col3 = st.columns(3)
-col1.metric("CAPEX", f"£{capex:,.0f}")
-col2.metric("OPEX", f"£{opex:,.0f}")
-col3.metric("Total Cost", f"£{total_cost:,.0f}")
-
-if removed > 0:
-    st.metric("£/kg Removed", f"£{total_cost/removed:,.0f}")
-
-# ======================
 # CHART
 # ======================
-df = pd.DataFrame({
-    "Type":["CAPEX","OPEX","Waste","Soil"],
-    "Cost":[capex,opex,waste,soil_cost]
-})
+chart = pd.DataFrame({"Type":["CAPEX","OPEX","Waste"],
+                      "Cost":[capex,opex,waste]})
 
-st.plotly_chart(px.bar(df, x="Type", y="Cost", text="Cost"))
+st.plotly_chart(px.bar(chart,x="Type",y="Cost"))
+
+# ======================
+# PDF REPORT
+# ======================
+st.header("4. Export Report")
+
+def generate_pdf():
+    doc = SimpleDocTemplate("pfas_report.pdf")
+    styles = getSampleStyleSheet()
+
+    content = []
+
+    content.append(Paragraph("PFAS Treatment Report", styles["Title"]))
+    content.append(Spacer(1,10))
+
+    content.append(Paragraph(f"Water Volume: {water_volume}", styles["Normal"]))
+    content.append(Paragraph(f"Flow Rate: {flow_rate}", styles["Normal"]))
+    content.append(Paragraph(f"Selected Method: {selected}", styles["Normal"]))
+
+    content.append(Spacer(1,10))
+
+    content.append(Paragraph(f"Final Concentration: {final_conc:.4f} µg/L", styles["Normal"]))
+    content.append(Paragraph(f"Total Cost: £{total_cost:,.0f}", styles["Normal"]))
+
+    doc.build(content)
+
+generate = st.button("Generate PDF Report")
+
+if generate:
+    generate_pdf()
+    with open("pfas_report.pdf", "rb") as f:
+        st.download_button("Download Report", f, file_name="PFAS_Report.pdf")
