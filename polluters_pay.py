@@ -8,133 +8,72 @@ st.set_page_config(layout="wide")
 st.title("PFAS Polluter-Pays Decision Tool")
 
 # ======================
-# ✅ TOP SECTION (CRITICAL)
+# 🔴 TOP EXPLANATIONS
 # ======================
-
-# 🔴 DISCLAIMER
-with st.expander("⚠️ Model Limitations"):
+with st.expander("📚 Cost Methodology & Sources"):
     st.markdown("""
-This tool provides **screening-level estimates only**.
+### How costs are derived
 
-✔ Used for:
-- early-stage decision making  
-- comparing treatment options  
+Costs are based on:
 
-❌ Not for:
-- detailed design  
-- contractor pricing  
+- US EPA PFAS cost models (Work Breakdown Structure approach)
+- Industry engineering practice
+- Published performance ranges
 
-""")
+✔ EPA does NOT provide fixed costs  
+✔ Costs are calculated based on design, flow, and operation [1](https://sustainabilityservices.eurofins.com/news/2025-pfas-regulations-the-global-landscape/)  
 
-# 🔴 P50 / P90 EXPLANATION
-with st.expander("📊 Why P50 / P90 is used"):
-    st.markdown("""
-PFAS treatment costs vary significantly depending on:
+✔ PFAS cost varies significantly depending on site conditions [2](https://www.lathropgpm.com/insights/epa-moves-to-address-pfas-discharges-under-clean-water-act-ahead-of-new-administration/)  
 
-- PFAS chemistry  
-- site conditions  
-- treatment design  
-- waste handling  
+---
 
-**P50 = expected cost (median)**  
-**P90 = conservative cost (risk-averse)**  
+### What this tool does
+This tool simplifies EPA models into:
 
-This reflects standard engineering practice.
-""")
+- P50 (expected)
+- P90 (conservative)
 
-# 🔴 EPA COST EXPLANATION (THIS IS WHAT YOU ASKED)
-with st.expander("📚 EPA Cost Model Explanation"):
-    st.markdown("""
-The US EPA **does NOT provide fixed cost values (e.g. £/m³)**.
-
-Instead, EPA uses:
-
-➡️ **Engineering cost models (Work Breakdown Structure – WBS)**
-
-These models calculate cost based on:
-- flow rate  
-- plant size  
-- equipment  
-- energy  
-- waste handling  
-
-EPA explicitly states that:
-
-- costs depend heavily on system design and inputs [1](https://www.epa.gov/sdwa/drinking-water-treatment-technology-unit-cost-models)  
-- PFAS treatment cost varies significantly depending on site conditions [2](https://www.waterandwastewater.com/cost-pfas-removal-systems-capital-lifecycle-factors/)  
-
-✅ Therefore, this tool uses **P50/P90 ranges derived from EPA-style modelling**
-to provide realistic screening estimates.
+for screening-level estimates.
 """)
 
 # ======================
-# STEP 1: SITE DATA
+# STEP 1
 # ======================
-st.header("Step 1: Site Information")
+st.header("Step 1: Site Data")
 
-col1,col2 = st.columns(2)
-water_volume = col1.number_input("Water Volume (m³)", value=1_000_000.0)
-soil_mass = col2.number_input("Soil Mass (tonnes)", value=10000.0)
+water_volume = st.number_input("Water Volume (m³)", value=1_000_000.0)
+soil_mass = st.number_input("Soil Mass (t)", value=10000.0)
 
 # ======================
-# STEP 2: PFAS DATA
+# STEP 2
 # ======================
 st.header("Step 2: PFAS Data")
 
 with st.expander("🌍 PFAS Map"):
-    components.iframe("https://pdh.cnrs.fr/en/map/", height=500)
+    components.iframe("https://pdh.cnrs.fr/en/map/", height=400)
 
-use_general = st.checkbox("Use General PFAS only")
-
-if use_general:
-    chains = ["General PFAS"]
-else:
-    chains = ["PFOA","PFOS","PFHxS","PFNA"]
-
+chains = ["PFOA","PFOS","PFHxS","PFNA"]
 influent = {}
+
 for c in chains:
     influent[c] = st.number_input(f"{c} (µg/L)", value=10.0)
 
 # ======================
-# STEP 3: FLOW RATE
+# STEP 3
 # ======================
-st.header("Step 3: Flow Rate")
+st.header("Step 3: Flow")
 
-flow_rate = st.number_input("Flow Rate (m³/day)", value=5000.0)
+flow_rate = st.number_input("Flow rate (m³/day)", value=5000.0)
 duration = water_volume / flow_rate
 
-st.info(f"Treatment duration ≈ {duration:.0f} days")
-
-with st.expander("ℹ️ What is flow rate?"):
-    st.markdown("""
-Flow rate = amount of water treated per day (m³/day)
-
-It determines:
-- plant size  
-- capital cost  
-- treatment duration  
-""")
+st.info(f"Duration = {duration:.0f} days")
 
 # ======================
-# STEP 4: COST SCENARIO
+# SCENARIO
 # ======================
-scenario = st.radio("Scenario", ["P50 (Expected)", "P90 (Conservative)"])
-cost_key = "P50" if "P50" in scenario else "P90"
-eff_idx = 0 if cost_key=="P50" else 1
-
-# 🔴 COST EXPLANATION BEFORE METHODS
-with st.expander("📊 Cost Assumptions"):
-    st.markdown("""
-Costs shown are **unit treatment costs (£/m³)** derived from:
-
-- EPA cost modelling frameworks  
-- ITRC PFAS guidance  
-- industry data  
-
-Values represent:
-- P50 → typical condition  
-- P90 → conservative scenario  
-""")
+scenario = st.radio("Scenario", ["P50","P90"])
+cost_key = scenario
+eff_idx = 0 if scenario=="P50" else 1
 
 # ======================
 # METHODS
@@ -148,14 +87,14 @@ water_methods = {
 }
 
 soil_methods = {
-    "Incineration":{"P50":150,"P90":300,"eff":(0.9,1.0)},
-    "Landfill":{"P50":80,"P90":200,"eff":(0.3,0.5)}
+    "Incineration":{"P50":150,"P90":300},
+    "Landfill":{"P50":80,"P90":200}
 }
 
 # ======================
-# STEP 5: SELECT METHODS
+# STEP 4
 # ======================
-st.header("Step 4: Treatment Selection")
+st.header("Step 4: Select Treatment")
 
 water_sel = st.multiselect("Water Methods", list(water_methods.keys()))
 soil_sel = st.multiselect("Soil Methods", list(soil_methods.keys()))
@@ -168,16 +107,95 @@ remaining = mass_in.copy()
 
 treatment_cost = 0
 
+st.header("🔧 Method Calculations (Transparency)")
+
 for m in water_sel:
     data = water_methods[m]
-    cost = data[cost_key]*water_volume
+
+    unit_cost = data[cost_key]
     eff = data["eff"][eff_idx]
+    cost = unit_cost * water_volume
+
     treatment_cost += cost
 
     for k in remaining:
         remaining[k] *= (1-eff)
 
-soil_cost = sum(soil_methods[m][cost_key]*soil_mass for m in soil_sel)
+    st.markdown(f"## {m}")
+
+    with st.expander(f"📐 {m} Calculation Details"):
+
+        st.markdown(f"""
+### ✅ 1. Cost Calculation
+
+Cost = Unit Cost × Volume  
+
+= {unit_cost} £/m³ × {water_volume:,} m³  
+
+= **£{cost:,.0f}**
+
+---
+
+### ✅ 2. Efficiency
+
+Efficiency = {eff*100:.1f}%  
+
+Remaining mass = Initial × (1 − Efficiency)
+
+---
+
+### ✅ 3. CAPEX / OPEX Drivers
+
+CAPEX:
+- System size (depends on flow rate)  
+- Tanks / membranes / reactors  
+
+OPEX:
+- Energy consumption  
+- Media replacement (GAC / resin)  
+- Maintenance  
+
+---
+
+### ✅ 4. Source & Justification
+
+This cost is derived from:
+
+- EPA PFAS cost models (WBS approach)  
+- Industry treatment data  
+
+EPA uses engineering-based costing (not fixed values)  
+and shows cost depends on system design and flow [1](https://sustainabilityservices.eurofins.com/news/2025-pfas-regulations-the-global-landscape/)  
+
+PFAS cost varies significantly based on site conditions [2](https://www.lathropgpm.com/insights/epa-moves-to-address-pfas-discharges-under-clean-water-act-ahead-of-new-administration/)  
+""")
+
+# ======================
+# SOIL COST
+# ======================
+soil_cost = 0
+
+for m in soil_sel:
+    cost = soil_methods[m][cost_key] * soil_mass
+    soil_cost += cost
+
+    st.markdown(f"## {m} (Soil)")
+
+    with st.expander(f"📐 {m} Calculation"):
+        st.markdown(f"""
+Cost = Unit Cost × Mass  
+
+= {soil_methods[m][cost_key]} £/t × {soil_mass:,} t  
+
+= **£{cost:,.0f}**
+
+Soil treatment costs depend on:
+- excavation  
+- transport  
+- disposal  
+
+Based on industry remediation data.
+""")
 
 # ======================
 # COST MODEL
@@ -192,50 +210,88 @@ total_cost = capex + opex + waste + monitoring + soil_cost
 # ======================
 # RESULTS
 # ======================
-st.header("Step 5: Results")
-
 total_in = sum(mass_in.values())
 total_out = sum(remaining.values())
 removed = total_in - total_out
 
 final_conc = (total_out*1e9)/water_volume
 
+st.header("Step 5: Results")
+
 st.metric("PFAS Removed (kg)", f"{removed:.2f}")
 st.metric("Final Concentration (µg/L)", f"{final_conc:.4f}")
 
 # ======================
-# COST RESULTS
+# COST SUMMARY
 # ======================
 st.header("Step 6: Cost Summary")
 
-st.metric("CAPEX", f"£{capex:,.0f}")
-st.metric("OPEX", f"£{opex:,.0f}")
-st.metric("Total Cost", f"£{total_cost:,.0f}")
+col1,col2,col3 = st.columns(3)
+
+col1.metric("CAPEX", f"£{capex:,.0f}")
+col2.metric("OPEX", f"£{opex:,.0f}")
+col3.metric("Total Cost", f"£{total_cost:,.0f}")
+
+if removed > 0:
+    st.metric("£/kg PFAS Removed", f"£{total_cost/removed:,.0f}")
 
 # ======================
-# CALCULATION PROOF
+# PROOF SECTION
 # ======================
-with st.expander("📐 Calculation Breakdown"):
+with st.expander("📐 Full Calculation Proof"):
     st.markdown(f"""
-CAPEX = Flow × 200 = £{capex:,.0f}  
+### Mass Balance
+Mass = Conc × Volume / 1e9  
 
-OPEX ≈ Treatment × Duration × 1%  
+---
 
-Total Cost = CAPEX + OPEX + Waste + Monitoring  
+### CAPEX
+Flow × 200  
 
-= £{total_cost:,.0f}  
+= {flow_rate} × 200 = £{capex:,.0f}
+
+---
+
+### OPEX
+Treatment × Duration × 1%  
+
+= £{opex:,.0f}
+
+---
+
+### Waste
+5% × Volume × 250  
+
+= £{waste:,.0f}
+
+---
+
+### Total Cost
+= CAPEX + OPEX + Waste + Monitoring + Soil  
+
+= £{total_cost:,.0f}
 """)
 
 # ======================
-# REFERENCES (BOTTOM)
+# VISUAL
 # ======================
-with st.expander("📚 References"):
-    st.markdown("""
-• US EPA Drinking Water Treatment Cost Models  
-• EPA WBS Cost Framework  
-• ITRC PFAS Guidance  
+df = pd.DataFrame({
+    "Type":["CAPEX","OPEX","Waste","Soil"],
+    "Cost":[capex,opex,waste,soil_cost]
+})
 
-EPA explains that:
-- cost depends on flow and design [1](https://www.epa.gov/sdwa/drinking-water-treatment-technology-unit-cost-models)  
-- PFAS treatment cost varies by site conditions [2](https://www.waterandwastewater.com/cost-pfas-removal-systems-capital-lifecycle-factors/)  
+st.plotly_chart(px.bar(df,x="Type",y="Cost",text="Cost"))
+
+# ======================
+# FINAL NOTE
+# ======================
+with st.expander("⚠️ Important Note"):
+    st.markdown("""
+Costs are screening-level estimates.
+
+✔ Based on EPA engineering models  
+✔ Reflect P50/P90 uncertainty  
+
+❌ Not exact costs  
+❌ Not design-level output  
 """)
