@@ -206,3 +206,54 @@ Used to assess cumulative PFAS risk.
 # ======================
 st.header("Step 6: Costs")
 
+st.metric("CAPEX", f"£{capex:,.0f}")
+st.metric("OPEX", f"£{opex:,.0f}")
+st.metric("Waste", f"£{waste_cost:,.0f}")
+st.metric("Monitoring", f"£{monitoring:,.0f}")
+st.metric("Soil Cost", f"£{soil_cost:,.0f}")
+st.metric("Total Cost", f"£{total_cost:,.0f}")
+
+if removed>0:
+    st.metric("£/kg removed", f"£{total_cost/removed:,.0f}")
+
+# ======================
+# CALCULATION PROOF
+# ======================
+with st.expander("📐 Calculation Breakdown"):
+    st.markdown(f"""
+Mass = Conc × Volume / 1e9  
+
+CAPEX = Flow × 200 = {flow_rate} × 200 = £{capex:,.0f}  
+
+OPEX ≈ Treatment × Duration × 1% = £{opex:,.0f}  
+
+Waste = 5% × Volume × 250 = £{waste_cost:,.0f}  
+
+Total = CAPEX + OPEX + Waste + Monitoring + Soil  
+
+= £{total_cost:,.0f}
+""")
+
+# ======================
+# VISUAL
+# ======================
+df = pd.DataFrame({
+    "Type":["CAPEX","OPEX","Waste","Monitoring","Soil"],
+    "Cost":[capex,opex,waste_cost,monitoring,soil_cost]
+})
+
+st.plotly_chart(px.bar(df,x="Type",y="Cost",text="Cost"))
+
+# ======================
+# REFERENCES
+# ======================
+with st.expander("📚 References"):
+    st.markdown("""
+• US EPA PFAS Cost Models (2023–2024)  
+• EPA WBS Engineering Cost Framework  
+• ITRC PFAS Guidance  
+
+EPA shows costs depend heavily on flow, influent, and design assumptions [1](https://www.epa.gov/sdwa/drinking-water-treatment-technology-unit-cost-models)  
+PFAS treatment costs vary significantly due to site-specific conditions [2](https://www.waterandwastewater.com/cost-pfas-removal-systems-capital-lifecycle-factors/)  
+""")
+``
