@@ -256,4 +256,4 @@ with st.expander("📚 References"):
 EPA shows costs depend heavily on flow, influent, and design assumptions [1](https://www.epa.gov/sdwa/drinking-water-treatment-technology-unit-cost-models)  
 PFAS treatment costs vary significantly due to site-specific conditions [2](https://www.waterandwastewater.com/cost-pfas-removal-systems-capital-lifecycle-factors/)  
 """)
-``
+
