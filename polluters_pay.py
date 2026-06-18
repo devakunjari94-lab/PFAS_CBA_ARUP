@@ -1,10 +1,12 @@
 import os
+import base64
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import streamlit.components.v1 as components
 
 # ======================
-# 🔐 PASSWORD (IMPROVED)
+# 🔐 PASSWORD
 # ======================
 PASSWORD = "PFAS2026"
 
@@ -13,7 +15,7 @@ if "auth" not in st.session_state:
 
 if not st.session_state.auth:
     st.markdown("# 🔐 PFAS Tool – Secure Access")
-    st.info("Enter the password to access the application")
+    st.info("Enter password to access the application")
 
     pw = st.text_input("Password", type="password")
 
@@ -28,9 +30,15 @@ if not st.session_state.auth:
     st.stop()
 
 # ======================
-# CONFIG
+# CONFIG + LOGO
 # ======================
 st.set_page_config(layout="wide")
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+logo_path = os.path.join(BASE_DIR, "arup_logo.png")
+
+if os.path.exists(logo_path):
+    st.image(logo_path, width=120)
 
 st.title("PFAS Polluter-Pays Decision Support Tool")
 
@@ -39,25 +47,23 @@ st.title("PFAS Polluter-Pays Decision Support Tool")
 # ======================
 with st.expander("⚠️ Model Scope & Limitations"):
     st.markdown("""
-### Important
+This tool provides **screening-level estimates only**
 
-This tool provides **screening-level estimates only**.
+✅ Use for:
+- comparing treatment options  
+- early-stage planning  
 
-✅ Suitable:
-- option comparison  
-- early-stage feasibility  
-
-❌ Not suitable:
+❌ Do NOT use for:
 - contractor pricing  
 - regulatory submission  
 
-Costs vary depending on:
-- water chemistry  
-- PFAS composition  
-- system design  
+Costs depend on:
+- water quality  
+- PFAS type  
+- design  
 - waste disposal  
 
-👉 Use for decision support, not final pricing.
+👉 Results are **indicative, not exact**
 """)
 
 # ======================
@@ -67,25 +73,30 @@ st.header("⚙️ Cost Scenario")
 
 scenario = st.selectbox(
     "Select scenario",
-    [
-        "Optimistic (Best Case)",
-        "Average",
-        "Conservative (Worst Case)"
-    ]
+    ["Optimistic (Best Case)", "Average", "Conservative (Worst Case)"]
 )
 
 uncertainty = st.slider("Uncertainty (%)", 0, 100, 50)
 
-with st.expander("ℹ️ What does uncertainty mean?"):
+# ✅ CLEAR EXPLANATION
+with st.expander("ℹ️ What does 'Uncertainty' mean?"):
     st.markdown("""
-Costs vary in reality.
+In real projects, PFAS treatment cost is uncertain because:
 
-This slider moves between:
-- Best case (0%)
-- Typical case (50%)
-- Worst case (100%)
+- water quality changes cost  
+- PFAS type affects difficulty  
+- design differs between contractors  
+- disposal costs vary  
 
-👉 This reflects uncertainty in real projects.
+---
+
+### What this slider does
+
+- 0% → simple site → lower cost  
+- 50% → typical site  
+- 100% → complex site → higher cost  
+
+👉 This tool shows a **range of possible costs**
 """)
 
 def get_cost(best, worst):
@@ -99,10 +110,33 @@ def get_cost(best, worst):
 # ======================
 # INPUTS
 # ======================
-st.header("Step 1: Inputs")
+st.header("Step 1: Site Data")
 
-water_volume = st.number_input("Water Volume (m³)", value=1_000_000.0)
-flow_rate = st.number_input("Flow Rate (m³/day)", value=5000.0)
+col1, col2 = st.columns(2)
+water_volume = col1.number_input("Water Volume (m³)", value=1_000_000.0)
+flow_rate = col2.number_input("Flow Rate (m³/day)", value=5000.0)
+
+# ======================
+# PFAS INPUT
+# ======================
+st.header("Step 2: PFAS Data")
+
+with st.expander("🌍 PFAS Global Map"):
+    components.iframe("https://pdh.cnrs.fr/en/map/", height=600)
+
+use_general = st.checkbox("I don’t know PFAS → use Total PFAS")
+
+influent = {}
+
+if use_general:
+    influent["Total PFAS"] = st.number_input("Total PFAS (µg/L)", value=10.0)
+else:
+    influent["PFOA"] = st.number_input("PFOA (µg/L)", value=5.0)
+    influent["PFOS"] = st.number_input("PFOS (µg/L)", value=5.0)
+
+    with st.expander("➕ Additional PFAS"):
+        influent["PFHxS"] = st.number_input("PFHxS (µg/L)", value=0.0)
+        influent["PFNA"] = st.number_input("PFNA (µg/L)", value=0.0)
 
 # ======================
 # METHODS
@@ -122,17 +156,17 @@ d = methods[method]
 # ======================
 selected_cost = get_cost(d["best"], d["worst"])
 
-mass_in = 0.01  # simplified example
-remaining = mass_in * (1 - d["eff"])
+mass_in = sum([v*water_volume/1e9 for v in influent.values()])
+remaining = mass_in*(1-d["eff"])
 
-final_conc = remaining * 1e9 / water_volume
+final_conc = remaining*1e9/water_volume
 removed = mass_in - remaining
 
-treatment_cost = selected_cost * water_volume
+treatment_cost = selected_cost*water_volume
 
-capex = flow_rate * 200
-opex = treatment_cost * 0.01
-waste = water_volume * 0.05 * 250
+capex = flow_rate*200
+opex = treatment_cost*0.01
+waste = water_volume*0.05*250
 
 total_cost = capex + opex + waste
 
@@ -146,7 +180,7 @@ col1.metric("PFAS Removed (kg)", f"{removed:.4f}")
 col2.metric("Final Concentration (µg/L)", f"{final_conc:.4f}")
 
 # ======================
-# COST RANGE TABLE
+# COST RANGE
 # ======================
 st.header("Cost Range")
 
@@ -166,7 +200,6 @@ st.table(df)
 # TOTAL COST
 # ======================
 st.header("Total Cost")
-
 st.metric("Estimated Cost (£)", f"{total_cost:,.0f}")
 
 # ======================
@@ -180,16 +213,24 @@ df_chart = pd.DataFrame({
 st.plotly_chart(px.bar(df_chart, x="Type", y="Cost"))
 
 # ======================
-# 📄 PRINTABLE REPORT (NEW)
+# REPORT
 # ======================
 st.header("📄 Export Report")
 
-st.markdown("### Printable Summary (Press Ctrl+P → Save as PDF)")
+logo_base64 = ""
+
+if os.path.exists(logo_path):
+    with open(logo_path, "rb") as img:
+        logo_base64 = base64.b64encode(img.read()).decode()
 
 report_html = f"""
-<div style="background:white;padding:30px">
+<div style="background:white;padding:40px;font-family:Arial">
+
+<img src="data:image/png;base64,{logo_base64}" width="120">
 
 <h1>PFAS Treatment Report</h1>
+
+<hr>
 
 <h2>Method</h2>
 <p>{method}</p>
@@ -200,9 +241,9 @@ report_html = f"""
 <li>Final Concentration: {final_conc:.4f} µg/L</li>
 </ul>
 
-<h2>Costs</h2>
+<h2>Cost Summary</h2>
 <ul>
-<li>Selected Cost: £{treatment_cost:,.0f}</li>
+<li>Treatment Cost: £{treatment_cost:,.0f}</li>
 <li>CAPEX: £{capex:,.0f}</li>
 <li>OPEX: £{opex:,.0f}</li>
 <li>Total Cost: £{total_cost:,.0f}</li>
@@ -211,13 +252,14 @@ report_html = f"""
 <h2>Scenario</h2>
 <p>{scenario} (Uncertainty: {uncertainty}%)</p>
 
-<p style="margin-top:40px">
-This report is a screening-level estimate and not a final design or cost quotation.
+<hr>
+<p style="font-size:12px;color:gray">
+Screening-level estimate only. Not for design or procurement.
 </p>
 
 </div>
 """
 
-st.components.v1.html(report_html, height=600)
+components.html(report_html, height=600)
 
-st.info("👉 Press Ctrl+P → Save as PDF")
+st.info("👉 Press Ctrl + P → Save as PDF")
