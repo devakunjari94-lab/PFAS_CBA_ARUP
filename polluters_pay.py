@@ -221,4 +221,3 @@ This report is a screening-level estimate and not a final design or cost quotati
 st.components.v1.html(report_html, height=600)
 
 st.info("👉 Press Ctrl+P → Save as PDF")
-``
