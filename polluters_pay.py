@@ -35,24 +35,38 @@ logo_path = os.path.join(BASE_DIR, "arup_logo.png")
 if os.path.exists(logo_path):
     st.image(logo_path, width=150)
 
-st.title("PFAS Polluter-Pays Decision Tool")
+st.title("PFAS Polluter-Pays Decision Support Tool")
+
+# ======================
+# INTRO
+# ======================
+with st.expander("📘 How to Use This Tool"):
+    st.markdown("""
+1. Enter site data  
+2. Add PFAS concentrations  
+3. Choose treatments  
+4. Review results, compliance, and cost  
+
+Outputs:
+- PFAS removal  
+- final concentration  
+- compliance  
+- cost estimate  
+""")
 
 # ======================
 # DISCLAIMER
 # ======================
 with st.expander("⚠️ Model Scope & Limitations"):
     st.markdown("""
-This tool provides **screening-level PFAS cost and performance estimates**.
+Screening-level tool only.
 
-✅ Suitable:
-- Early-stage feasibility  
-- Comparing options  
+✅ early decision-making  
+✅ comparing options  
 
-❌ Not suitable:
-- Detailed design  
-- Regulatory submission  
+❌ not for design or regulatory submission  
 
-Based on EPA-style engineering modelling.
+Based on EPA-style engineering models.
 """)
 
 # ======================
@@ -70,9 +84,9 @@ soil_mass = col2.number_input("Soil Mass (tonnes)", value=10000.0)
 st.header("Step 2: PFAS Data")
 
 with st.expander("🌍 PFAS Map"):
-    components.iframe("https://pdh.cnrs.fr/en/map/", height=300)
+    components.iframe("https://pdh.cnrs.fr/en/map/", height=800, scrolling=True)
 
-use_general = st.checkbox("Use General PFAS")
+use_general = st.checkbox("Use General PFAS only")
 
 chains = ["General PFAS"] if use_general else ["PFOA","PFOS","PFHxS","PFNA"]
 
@@ -87,6 +101,18 @@ st.header("Step 3: Flow")
 
 flow_rate = st.number_input("Flow rate (m³/day)", value=5000.0)
 duration = water_volume / flow_rate if flow_rate > 0 else 0
+
+st.info(f"Treatment duration: {duration:.0f} days")
+
+with st.expander("ℹ️ What is Flow Rate?"):
+    st.markdown("""
+Flow rate = volume treated per day.
+
+Affects:
+- plant size (CAPEX)
+- duration
+- energy use
+""")
 
 # ======================
 # METHODS
@@ -105,7 +131,33 @@ soil_methods = {
 }
 
 # ======================
-# SCENARIO COMPARISON
+# METHOD EXPLANATION
+# ======================
+with st.expander("🔧 Treatment Methods Explained"):
+    st.markdown("""
+GAC: adsorption → spent carbon  
+Ion Exchange: resin → waste resin  
+RO: filtration → brine  
+AOP: oxidation → high energy  
+
+Most methods transfer PFAS to waste.
+""")
+
+# ======================
+# BYPRODUCTS
+# ======================
+with st.expander("⚗️ Treatment By-Products"):
+    st.markdown("""
+- GAC → carbon  
+- RO → brine  
+- IX → resin  
+- soil → contaminated soil  
+
+PFAS often moved, not destroyed.
+""")
+
+# ======================
+# STEP 4
 # ======================
 st.header("Step 4: Scenario Comparison")
 
@@ -117,9 +169,9 @@ for m in compare:
     d = water_methods[m]
 
     mass = sum([v*water_volume/1e9 for v in influent.values()])
-    remaining = mass * (1-d["eff"])
-    conc = remaining * 1e9 / water_volume
-    cost = d["cost"] * water_volume
+    remaining = mass*(1-d["eff"])
+    conc = remaining*1e9/water_volume
+    cost = d["cost"]*water_volume
 
     rows.append([m, conc, cost])
 
@@ -127,33 +179,47 @@ if rows:
     st.table(pd.DataFrame(rows, columns=["Method","Final Conc","Cost"]))
 
 # ======================
-# SELECT METHOD
+# STEP 5
 # ======================
 st.header("Step 5: Detailed Analysis")
 
 method = st.selectbox("Select method", list(water_methods.keys()))
-soil_sel = st.multiselect("Select soil treatment", list(soil_methods.keys()))
+soil_sel = st.multiselect("Select soil treatments", list(soil_methods.keys()))
 
 d = water_methods[method]
 
 mass_in = sum([v*water_volume/1e9 for v in influent.values()])
-remaining = mass_in * (1-d["eff"])
+remaining = mass_in*(1-d["eff"])
 
-final_conc = remaining * 1e9 / water_volume
-removed = mass_in - remaining
+final_conc = remaining*1e9/water_volume
+removed = mass_in-remaining
 
-treatment_cost = d["cost"] * water_volume
+treatment_cost = d["cost"]*water_volume
 soil_cost = sum([soil_methods[s]*soil_mass for s in soil_sel])
 
 # ======================
 # COST MODEL
 # ======================
-capex = flow_rate * 200
-opex = treatment_cost * duration * 0.01
-waste = water_volume * 0.05 * 250
+capex = flow_rate*200
+opex = treatment_cost*duration*0.01
+waste = water_volume*0.05*250
 monitoring = 50000
 
-total_cost = capex + opex + waste + monitoring + soil_cost
+total_cost = capex+opex+waste+monitoring+soil_cost
+
+# ======================
+# COST EXPLANATION
+# ======================
+with st.expander("📊 Cost Methodology"):
+    st.markdown("""
+Total = CAPEX + OPEX + Waste + Monitoring
+
+CAPEX = flow × factor  
+OPEX = treatment × duration  
+Waste = 5% × volume  
+
+Screening-level estimates based on engineering scaling.
+""")
 
 # ======================
 # RESULTS
@@ -177,19 +243,29 @@ THRESH = {
 receptor = st.selectbox("Receptor", list(THRESH.keys()))
 limit = THRESH[receptor]
 
-ratio = final_conc / limit
+ratio = final_conc/limit
 
-st.metric("Ratio", f"{ratio:.2f}")
+st.metric("Ratio (Result / Limit)", f"{ratio:.2f}")
 
 if ratio <= 1:
     st.success("✅ Compliant")
 else:
     st.error("❌ Not Compliant")
 
+with st.expander("⚖️ Compliance Explanation"):
+    st.markdown("""
+Ratio = Result ÷ Limit  
+
+<1 = pass  
+>1 = exceed  
+
+Used to assess compliance quickly.
+""")
+
 # ======================
-# COSTS
+# COST
 # ======================
-st.header("Step 8: Costs")
+st.header("Step 8: Cost Summary")
 
 col1,col2,col3 = st.columns(3)
 
@@ -198,7 +274,7 @@ col2.metric("OPEX", f"£{opex:,.0f}")
 col3.metric("Total Cost", f"£{total_cost:,.0f}")
 
 # ======================
-# CHART
+# GRAPH
 # ======================
 df = pd.DataFrame({
     "Type":["CAPEX","OPEX","Waste","Soil"],
@@ -209,57 +285,21 @@ st.plotly_chart(px.bar(df, x="Type", y="Cost", text="Cost"),
                 use_container_width=True)
 
 # ======================
-# ✅ HTML REPORT (NO INSTALL PDF METHOD)
+# REPORT
 # ======================
 st.header("Step 9: Export Report")
 
 html_report = f"""
 <html>
-<head>
-<style>
-body {{
-    font-family: Arial;
-    margin: 40px;
-}}
-h1 {{ color:#003366; }}
-table {{ width:100%; border-collapse: collapse; }}
-td, th {{ border:1px solid #ddd; padding:8px; }}
-</style>
-</head>
 <body>
-
 <h1>PFAS Treatment Report</h1>
-
-<h2>Site Details</h2>
-<p>Water Volume: {water_volume:,} m³</p>
-<p>Flow Rate: {flow_rate:,} m³/day</p>
-
-<h2>Results</h2>
-<p>Final Concentration: {final_conc:.4f} µg/L</p>
-<p>PFAS Removed: {removed:.4f} kg</p>
-
-<h2>Costs</h2>
+<p>Final Concentration: {final_conc:.4f}</p>
 <p>Total Cost: £{total_cost:,.0f}</p>
-
-<h2>Compliance</h2>
 <p>Ratio: {ratio:.2f}</p>
-<p>{"✅ Compliant" if ratio<=1 else "❌ Not Compliant"}</p>
-
 </body>
 </html>
 """
 
-st.download_button(
-    "📄 Download Report (HTML)",
-    html_report,
-    file_name="PFAS_Report.html",
-    mime="text/html"
-)
+st.download_button("Download Report", html_report, "PFAS_Report.html")
 
-st.info("""
-To create PDF:
-
-1. Open the downloaded file  
-2. Press CTRL + P  
-3. Select "Save as PDF"
-""")
+st.info("Open file → Ctrl+P → Save as PDF")
