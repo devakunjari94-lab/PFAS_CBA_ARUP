@@ -38,36 +38,24 @@ if os.path.exists(logo_path):
 st.title("PFAS Polluter-Pays Decision Support Tool")
 
 # ======================
-# INTRO
+# SCENARIO SETTINGS (NEW)
 # ======================
-with st.expander("📘 How to Use This Tool"):
-    st.markdown("""
-1. Enter site data  
-2. Add PFAS concentrations  
-3. Choose treatments  
-4. Review results, compliance, and cost  
+st.header("⚙️ Cost Scenario Settings")
 
-Outputs:
-- PFAS removal  
-- final concentration  
-- compliance  
-- cost estimate  
-""")
+scenario = st.selectbox(
+    "Select Cost Scenario",
+    ["Optimistic (Best Case)", "Average", "Conservative (Worst Case)"]
+)
 
-# ======================
-# DISCLAIMER
-# ======================
-with st.expander("⚠️ Model Scope & Limitations"):
-    st.markdown("""
-Screening-level tool only.
+uncertainty = st.slider("Uncertainty (%)", 0, 100, 50)
 
-✅ early decision-making  
-✅ comparing options  
-
-❌ not for design or regulatory submission  
-
-Based on EPA-style engineering models.
-""")
+def get_cost(best, worst):
+    if scenario == "Optimistic (Best Case)":
+        return best
+    elif scenario == "Conservative (Worst Case)":
+        return worst
+    else:
+        return best + (worst - best)*(uncertainty/100)
 
 # ======================
 # STEP 1
@@ -84,7 +72,7 @@ soil_mass = col2.number_input("Soil Mass (tonnes)", value=10000.0)
 st.header("Step 2: PFAS Data")
 
 with st.expander("🌍 PFAS Map"):
-    components.iframe("https://pdh.cnrs.fr/en/map/", height=800, scrolling=True)
+    components.iframe("https://pdh.cnrs.fr/en/map/", height=800)
 
 use_general = st.checkbox("Use General PFAS only")
 
@@ -104,60 +92,26 @@ duration = water_volume / flow_rate if flow_rate > 0 else 0
 
 st.info(f"Treatment duration: {duration:.0f} days")
 
-with st.expander("ℹ️ What is Flow Rate?"):
-    st.markdown("""
-Flow rate = volume treated per day.
-
-Affects:
-- plant size (CAPEX)
-- duration
-- energy use
-""")
-
 # ======================
-# METHODS
+# UPDATED METHODS (RANGE BASED)
 # ======================
 water_methods = {
-    "GAC":{"cost":0.04,"eff":0.7},
-    "Ion Exchange":{"cost":0.06,"eff":0.8},
-    "RO":{"cost":0.12,"eff":0.95},
-    "AOP":{"cost":0.5,"eff":0.85}
+    "GAC": {"best":0.02,"worst":0.20,"eff":0.75},
+    "Ion Exchange": {"best":0.03,"worst":0.12,"eff":0.85},
+    "RO": {"best":0.05,"worst":0.25,"eff":0.95},
+    "Foam Fractionation": {"best":0.01,"worst":0.08,"eff":0.80},
+    "AOP": {"best":0.50,"worst":1.00,"eff":0.85},
+    "Electrochemical": {"best":0.20,"worst":1.50,"eff":0.90}
 }
 
 soil_methods = {
-    "Excavate & Incinerate":150,
+    "Excavate & Incinerate":100,
     "Landfill":80,
-    "Soil Washing":50
+    "Soil Washing":20
 }
 
 # ======================
-# METHOD EXPLANATION
-# ======================
-with st.expander("🔧 Treatment Methods Explained"):
-    st.markdown("""
-GAC: adsorption → spent carbon  
-Ion Exchange: resin → waste resin  
-RO: filtration → brine  
-AOP: oxidation → high energy  
-
-Most methods transfer PFAS to waste.
-""")
-
-# ======================
-# BYPRODUCTS
-# ======================
-with st.expander("⚗️ Treatment By-Products"):
-    st.markdown("""
-- GAC → carbon  
-- RO → brine  
-- IX → resin  
-- soil → contaminated soil  
-
-PFAS often moved, not destroyed.
-""")
-
-# ======================
-# STEP 4
+# STEP 4: COMPARISON
 # ======================
 st.header("Step 4: Scenario Comparison")
 
@@ -167,19 +121,19 @@ rows = []
 
 for m in compare:
     d = water_methods[m]
+    cost = get_cost(d["best"], d["worst"])
 
     mass = sum([v*water_volume/1e9 for v in influent.values()])
     remaining = mass*(1-d["eff"])
     conc = remaining*1e9/water_volume
-    cost = d["cost"]*water_volume
 
-    rows.append([m, conc, cost])
+    rows.append([m, conc, cost*water_volume])
 
 if rows:
-    st.table(pd.DataFrame(rows, columns=["Method","Final Conc","Cost"]))
+    st.table(pd.DataFrame(rows, columns=["Method","Final Conc","Cost (£)"]))
 
 # ======================
-# STEP 5
+# STEP 5: DETAILED
 # ======================
 st.header("Step 5: Detailed Analysis")
 
@@ -187,6 +141,7 @@ method = st.selectbox("Select method", list(water_methods.keys()))
 soil_sel = st.multiselect("Select soil treatments", list(soil_methods.keys()))
 
 d = water_methods[method]
+selected_cost = get_cost(d["best"], d["worst"])
 
 mass_in = sum([v*water_volume/1e9 for v in influent.values()])
 remaining = mass_in*(1-d["eff"])
@@ -194,7 +149,7 @@ remaining = mass_in*(1-d["eff"])
 final_conc = remaining*1e9/water_volume
 removed = mass_in-remaining
 
-treatment_cost = d["cost"]*water_volume
+treatment_cost = selected_cost*water_volume
 soil_cost = sum([soil_methods[s]*soil_mass for s in soil_sel])
 
 # ======================
@@ -208,26 +163,28 @@ monitoring = 50000
 total_cost = capex+opex+waste+monitoring+soil_cost
 
 # ======================
-# COST EXPLANATION
-# ======================
-with st.expander("📊 Cost Methodology"):
-    st.markdown("""
-Total = CAPEX + OPEX + Waste + Monitoring
-
-CAPEX = flow × factor  
-OPEX = treatment × duration  
-Waste = 5% × volume  
-
-Screening-level estimates based on engineering scaling.
-""")
-
-# ======================
 # RESULTS
 # ======================
 st.header("Step 6: Results")
 
 st.metric("PFAS Removed (kg)", f"{removed:.4f}")
 st.metric("Final Concentration (µg/L)", f"{final_conc:.4f}")
+
+# ======================
+# TRANSPARENCY TABLE (NEW)
+# ======================
+st.header("Cost Transparency")
+
+df_transparency = pd.DataFrame({
+    "Scenario":["Best","Selected","Worst"],
+    "£/m³":[d["best"], selected_cost, d["worst"]],
+    "Total (£)":[
+        d["best"]*water_volume,
+        treatment_cost,
+        d["worst"]*water_volume
+    ]
+})
+st.table(df_transparency)
 
 # ======================
 # COMPLIANCE
@@ -241,31 +198,19 @@ THRESH = {
 }
 
 receptor = st.selectbox("Receptor", list(THRESH.keys()))
-limit = THRESH[receptor]
+ratio = final_conc/THRESH[receptor]
 
-ratio = final_conc/limit
-
-st.metric("Ratio (Result / Limit)", f"{ratio:.2f}")
+st.metric("Ratio", f"{ratio:.2f}")
 
 if ratio <= 1:
     st.success("✅ Compliant")
 else:
     st.error("❌ Not Compliant")
 
-with st.expander("⚖️ Compliance Explanation"):
-    st.markdown("""
-Ratio = Result ÷ Limit  
-
-<1 = pass  
->1 = exceed  
-
-Used to assess compliance quickly.
-""")
-
 # ======================
-# COST
+# COST SUMMARY
 # ======================
-st.header("Step 8: Cost Summary")
+st.header("Step 8: Costs")
 
 col1,col2,col3 = st.columns(3)
 
@@ -274,7 +219,7 @@ col2.metric("OPEX", f"£{opex:,.0f}")
 col3.metric("Total Cost", f"£{total_cost:,.0f}")
 
 # ======================
-# GRAPH
+# CHART
 # ======================
 df = pd.DataFrame({
     "Type":["CAPEX","OPEX","Waste","Soil"],
@@ -293,13 +238,13 @@ html_report = f"""
 <html>
 <body>
 <h1>PFAS Treatment Report</h1>
+<p>Method: {method}</p>
 <p>Final Concentration: {final_conc:.4f}</p>
 <p>Total Cost: £{total_cost:,.0f}</p>
+<p>Scenario: {scenario}</p>
 <p>Ratio: {ratio:.2f}</p>
 </body>
 </html>
 """
 
 st.download_button("Download Report", html_report, "PFAS_Report.html")
-
-st.info("Open file → Ctrl+P → Save as PDF")
