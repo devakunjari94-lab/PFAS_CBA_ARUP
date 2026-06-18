@@ -2,10 +2,9 @@ import os
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import streamlit.components.v1 as components
 
 # ======================
-# 🔐 PASSWORD
+# 🔐 PASSWORD (IMPROVED)
 # ======================
 PASSWORD = "PFAS2026"
 
@@ -13,100 +12,82 @@ if "auth" not in st.session_state:
     st.session_state.auth = False
 
 if not st.session_state.auth:
-    pw = st.text_input("Enter password", type="password")
-    if pw:
+    st.markdown("# 🔐 PFAS Tool – Secure Access")
+    st.info("Enter the password to access the application")
+
+    pw = st.text_input("Password", type="password")
+
+    if st.button("Unlock"):
         if pw == PASSWORD:
             st.session_state.auth = True
             st.success("✅ Access granted")
+            st.rerun()
         else:
             st.error("❌ Incorrect password")
-            st.stop()
-    else:
-        st.stop()
+
+    st.stop()
 
 # ======================
-# CONFIG + LOGO
+# CONFIG
 # ======================
 st.set_page_config(layout="wide")
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-logo_path = os.path.join(BASE_DIR, "arup_logo.png")
-
-if os.path.exists(logo_path):
-    st.image(logo_path, width=150)
 
 st.title("PFAS Polluter-Pays Decision Support Tool")
 
 # ======================
-# ✅ DISCLAIMER (FIXED)
+# DISCLAIMER
 # ======================
 with st.expander("⚠️ Model Scope & Limitations"):
     st.markdown("""
-### Important – How to Use These Results
+### Important
 
 This tool provides **screening-level estimates only**.
 
-✅ Suitable for:
+✅ Suitable:
+- option comparison  
 - early-stage feasibility  
-- comparing treatment options  
 
-❌ Not suitable for:
-- detailed design  
+❌ Not suitable:
 - contractor pricing  
 - regulatory submission  
 
----
-
-### Why results vary
-
-Costs depend on:
+Costs vary depending on:
 - water chemistry  
-- PFAS type  
+- PFAS composition  
 - system design  
 - waste disposal  
 
-👉 **Use results for comparison, not exact pricing**
+👉 Use for decision support, not final pricing.
 """)
 
 # ======================
-# ✅ SCENARIO (NEW)
+# SCENARIO
 # ======================
-st.header("⚙️ Cost Scenario Settings")
+st.header("⚙️ Cost Scenario")
 
 scenario = st.selectbox(
-    "Cost Scenario (risk level)",
+    "Select scenario",
     [
-        "Optimistic (Best Case – lower cost)",
-        "Average (Typical case)",
-        "Conservative (Worst Case – higher cost)"
+        "Optimistic (Best Case)",
+        "Average",
+        "Conservative (Worst Case)"
     ]
 )
 
 uncertainty = st.slider("Uncertainty (%)", 0, 100, 50)
 
-# ✅ EXPLANATION (FIXED POSITION)
-with st.expander("ℹ️ What does 'Uncertainty' mean?"):
+with st.expander("ℹ️ What does uncertainty mean?"):
     st.markdown("""
-Costs are not fixed.
+Costs vary in reality.
 
-They depend on:
-- water quality  
-- design  
-- waste  
+This slider moves between:
+- Best case (0%)
+- Typical case (50%)
+- Worst case (100%)
 
----
-
-### Slider meaning:
-- **0% → Best case**
-- **50% → Typical**
-- **100% → Worst case**
-
-👉 This shows a **range**, not a single cost.
+👉 This reflects uncertainty in real projects.
 """)
 
-# ======================
-# FUNCTION
-# ======================
 def get_cost(best, worst):
     if scenario.startswith("Optimistic"):
         return best
@@ -116,120 +97,63 @@ def get_cost(best, worst):
         return best + (worst - best)*(uncertainty/100)
 
 # ======================
-# STEP 1
+# INPUTS
 # ======================
-st.header("Step 1: Site")
+st.header("Step 1: Inputs")
 
-col1, col2 = st.columns(2)
-water_volume = col1.number_input("Water Volume (m³)", value=1_000_000.0)
-soil_mass = col2.number_input("Soil Mass (t)", value=10000.0)
-
-# ======================
-# STEP 2
-# ======================
-st.header("Step 2: PFAS")
-
-with st.expander("🌍 PFAS Map"):
-    components.iframe("https://pdh.cnrs.fr/en/map/", height=800)
-
-chains = ["PFOA","PFOS"]
-influent = {}
-
-for c in chains:
-    influent[c] = st.number_input(f"{c} (µg/L)", value=10.0)
+water_volume = st.number_input("Water Volume (m³)", value=1_000_000.0)
+flow_rate = st.number_input("Flow Rate (m³/day)", value=5000.0)
 
 # ======================
-# STEP 3
+# METHODS
 # ======================
-st.header("Step 3: Flow")
-
-flow_rate = st.number_input("Flow (m³/day)", value=5000.0)
-duration = water_volume / flow_rate if flow_rate > 0 else 0
-
-st.info(f"Duration: {duration:.0f} days")
-
-# ======================
-# METHODS (UPDATED)
-# ======================
-water_methods = {
+methods = {
     "GAC": {"best":0.02,"worst":0.20,"eff":0.75},
     "Ion Exchange": {"best":0.03,"worst":0.12,"eff":0.85},
     "RO": {"best":0.05,"worst":0.25,"eff":0.95},
     "AOP": {"best":0.50,"worst":1.00,"eff":0.85}
 }
 
-soil_methods = {
-    "Excavate & Incinerate":150,
-    "Soil Washing":20
-}
+method = st.selectbox("Select Treatment Method", list(methods.keys()))
+d = methods[method]
 
 # ======================
-# STEP 4
+# CALCULATIONS
 # ======================
-st.header("Step 4: Compare")
-
-compare = st.multiselect("Select methods", list(water_methods.keys()))
-
-rows = []
-
-for m in compare:
-    d = water_methods[m]
-    cost = get_cost(d["best"], d["worst"])
-
-    mass = sum([v*water_volume/1e9 for v in influent.values()])
-    remaining = mass*(1-d["eff"])
-    conc = remaining*1e9/water_volume
-
-    rows.append([m, conc, cost*water_volume])
-
-if rows:
-    st.table(pd.DataFrame(rows, columns=["Method","Final Conc","Cost (£)"]))
-
-# ======================
-# STEP 5
-# ======================
-st.header("Step 5: Detail")
-
-method = st.selectbox("Method", list(water_methods.keys()))
-d = water_methods[method]
-
 selected_cost = get_cost(d["best"], d["worst"])
 
-mass_in = sum([v*water_volume/1e9 for v in influent.values()])
-remaining = mass_in*(1-d["eff"])
+mass_in = 0.01  # simplified example
+remaining = mass_in * (1 - d["eff"])
 
-final_conc = remaining*1e9/water_volume
-removed = mass_in-remaining
+final_conc = remaining * 1e9 / water_volume
+removed = mass_in - remaining
 
-treatment_cost = selected_cost*water_volume
-soil_cost = sum([soil_methods[s]*soil_mass for s in st.multiselect("Soil", soil_methods.keys())])
+treatment_cost = selected_cost * water_volume
 
-# ======================
-# COST MODEL
-# ======================
-capex = flow_rate*200
-opex = treatment_cost*duration*0.01
-waste = water_volume*0.05*250
+capex = flow_rate * 200
+opex = treatment_cost * 0.01
+waste = water_volume * 0.05 * 250
 
-total_cost = capex + opex + waste + soil_cost
+total_cost = capex + opex + waste
 
 # ======================
 # RESULTS
 # ======================
 st.header("Results")
 
-st.metric("Removed (kg)", f"{removed:.3f}")
-st.metric("Final Conc (µg/L)", f"{final_conc:.3f}")
+col1, col2 = st.columns(2)
+col1.metric("PFAS Removed (kg)", f"{removed:.4f}")
+col2.metric("Final Concentration (µg/L)", f"{final_conc:.4f}")
 
 # ======================
-# TRANSPARENCY
+# COST RANGE TABLE
 # ======================
 st.header("Cost Range")
 
 df = pd.DataFrame({
     "Scenario":["Best","Selected","Worst"],
     "£/m³":[d["best"],selected_cost,d["worst"]],
-    "Total":[
+    "Total (£)":[
         d["best"]*water_volume,
         treatment_cost,
         d["worst"]*water_volume
@@ -239,42 +163,62 @@ df = pd.DataFrame({
 st.table(df)
 
 # ======================
-# COMPLIANCE
+# TOTAL COST
 # ======================
-st.header("Compliance")
+st.header("Total Cost")
 
-limit = st.selectbox("Limit",[0.1,0.5,2.0])
-ratio = final_conc/limit
-
-st.metric("Ratio", f"{ratio:.2f}")
-
-if ratio <= 1:
-    st.success("✅ Compliant")
-else:
-    st.error("❌ Exceeds")
-
-# ======================
-# COST SUMMARY
-# ======================
-st.header("Costs")
-
-st.metric("Total (£)", f"{total_cost:,.0f}")
+st.metric("Estimated Cost (£)", f"{total_cost:,.0f}")
 
 # ======================
 # CHART
 # ======================
-chart = pd.DataFrame({
-    "Type":["CAPEX","OPEX","Waste","Soil"],
-    "Cost":[capex,opex,waste,soil_cost]
+df_chart = pd.DataFrame({
+    "Type":["CAPEX","OPEX","Waste"],
+    "Cost":[capex,opex,waste]
 })
 
-st.plotly_chart(px.bar(chart, x="Type", y="Cost"))
+st.plotly_chart(px.bar(df_chart, x="Type", y="Cost"))
 
 # ======================
-# REPORT
+# 📄 PRINTABLE REPORT (NEW)
 # ======================
-st.download_button(
-    "Download Report",
-    f"Total Cost: £{total_cost:,.0f}",
-    "report.txt"
-)
+st.header("📄 Export Report")
+
+st.markdown("### Printable Summary (Press Ctrl+P → Save as PDF)")
+
+report_html = f"""
+<div style="background:white;padding:30px">
+
+<h1>PFAS Treatment Report</h1>
+
+<h2>Method</h2>
+<p>{method}</p>
+
+<h2>Results</h2>
+<ul>
+<li>PFAS Removed: {removed:.4f} kg</li>
+<li>Final Concentration: {final_conc:.4f} µg/L</li>
+</ul>
+
+<h2>Costs</h2>
+<ul>
+<li>Selected Cost: £{treatment_cost:,.0f}</li>
+<li>CAPEX: £{capex:,.0f}</li>
+<li>OPEX: £{opex:,.0f}</li>
+<li>Total Cost: £{total_cost:,.0f}</li>
+</ul>
+
+<h2>Scenario</h2>
+<p>{scenario} (Uncertainty: {uncertainty}%)</p>
+
+<p style="margin-top:40px">
+This report is a screening-level estimate and not a final design or cost quotation.
+</p>
+
+</div>
+"""
+
+st.components.v1.html(report_html, height=600)
+
+st.info("👉 Press Ctrl+P → Save as PDF")
+``
