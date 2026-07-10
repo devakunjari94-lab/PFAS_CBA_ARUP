@@ -1,265 +1,527 @@
-import os
-import base64
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
-import streamlit.components.v1 as components
 
-# ======================
-# 🔐 PASSWORD
-# ======================
+# =====================================
+# PASSWORD
+# =====================================
+
 PASSWORD = "PFAS2026"
 
 if "auth" not in st.session_state:
     st.session_state.auth = False
 
 if not st.session_state.auth:
-    st.markdown("# 🔐 PFAS Tool – Secure Access")
-    st.info("Enter password to access the application")
+
+    st.title("🔐 PFAS Tool Login")
 
     pw = st.text_input("Password", type="password")
 
-    if st.button("Unlock"):
+    if st.button("Login"):
         if pw == PASSWORD:
             st.session_state.auth = True
-            st.success("✅ Access granted")
             st.rerun()
         else:
-            st.error("❌ Incorrect password")
+            st.error("Incorrect Password")
 
     st.stop()
 
-# ======================
-# CONFIG + LOGO
-# ======================
-st.set_page_config(layout="wide")
+# =====================================
+# PAGE CONFIG
+# =====================================
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-logo_path = os.path.join(BASE_DIR, "arup_logo.png")
-
-if os.path.exists(logo_path):
-    st.image(logo_path, width=120)
-
-st.title("PFAS Polluter-Pays Decision Support Tool")
-
-# ======================
-# DISCLAIMER
-# ======================
-with st.expander("⚠️ Model Scope & Limitations"):
-    st.markdown("""
-This tool provides **screening-level estimates only**
-
-✅ Use for:
-- comparing treatment options  
-- early-stage planning  
-
-❌ Do NOT use for:
-- contractor pricing  
-- regulatory submission  
-
-Costs depend on:
-- water quality  
-- PFAS type  
-- design  
-- waste disposal  
-
-👉 Results are **indicative, not exact**
-""")
-
-# ======================
-# SCENARIO
-# ======================
-st.header("⚙️ Cost Scenario")
-
-scenario = st.selectbox(
-    "Select scenario",
-    ["Optimistic (Best Case)", "Average", "Conservative (Worst Case)"]
+st.set_page_config(
+    page_title="PFAS Decision Support Tool",
+    layout="wide"
 )
 
-uncertainty = st.slider("Uncertainty (%)", 0, 100, 50)
+st.title("PFAS Polluter Pays Decision Support Tool")
 
-# ✅ CLEAR EXPLANATION
-with st.expander("ℹ️ What does 'Uncertainty' mean?"):
+# =====================================
+# DISCLAIMER
+# =====================================
+
+with st.expander("⚠ Model Scope & Limitations"):
+
     st.markdown("""
-In real projects, PFAS treatment cost is uncertain because:
+    This tool provides screening-level estimates only.
 
-- water quality changes cost  
-- PFAS type affects difficulty  
-- design differs between contractors  
-- disposal costs vary  
+    ✅ Suitable for:
 
----
+    - Early-stage option assessment
+    - Technology comparison
+    - Polluter-pays scenarios
 
-### What this slider does
+    ❌ Not suitable for:
 
-- 0% → simple site → lower cost  
-- 50% → typical site  
-- 100% → complex site → higher cost  
+    - Detailed design
+    - Procurement
+    - Regulatory submission
+    """)
 
-👉 This tool shows a **range of possible costs**
-""")
+# =====================================
+# SCENARIO
+# =====================================
 
-def get_cost(best, worst):
-    if scenario.startswith("Optimistic"):
-        return best
-    elif scenario.startswith("Conservative"):
-        return worst
-    else:
-        return best + (worst - best)*(uncertainty/100)
+st.header("Project Scenario")
 
-# ======================
-# INPUTS
-# ======================
-st.header("Step 1: Site Data")
+scenario = st.selectbox(
+    "Cost Scenario",
+    [
+        "Optimistic",
+        "Average",
+        "Conservative"
+    ]
+)
+
+uncertainty = st.slider(
+    "Uncertainty (%)",
+    0,
+    100,
+    50
+)
+
+# =====================================
+# SITE DATA
+# =====================================
+
+st.header("Site Information")
 
 col1, col2 = st.columns(2)
-water_volume = col1.number_input("Water Volume (m³)", value=1_000_000.0)
-flow_rate = col2.number_input("Flow Rate (m³/day)", value=5000.0)
 
-# ======================
-# PFAS INPUT
-# ======================
-st.header("Step 2: PFAS Data")
+water_volume = col1.number_input(
+    "Water Volume (m³)",
+    value=1000000.0
+)
 
-with st.expander("🌍 PFAS Global Map"):
-    components.iframe("https://pdh.cnrs.fr/en/map/", height=600)
+flow_rate = col2.number_input(
+    "Flow Rate (m³/day)",
+    value=5000.0
+)
 
-use_general = st.checkbox("I don’t know PFAS → use Total PFAS")
+# =====================================
+# PFAS INPUTS
+# =====================================
 
-influent = {}
+st.header("PFAS Concentrations")
 
-if use_general:
-    influent["Total PFAS"] = st.number_input("Total PFAS (µg/L)", value=10.0)
-else:
-    influent["PFOA"] = st.number_input("PFOA (µg/L)", value=5.0)
-    influent["PFOS"] = st.number_input("PFOS (µg/L)", value=5.0)
+pfoa = st.number_input("PFOA (µg/L)", value=5.0)
+pfos = st.number_input("PFOS (µg/L)", value=5.0)
+pfhxs = st.number_input("PFHxS (µg/L)", value=1.0)
+pfna = st.number_input("PFNA (µg/L)", value=1.0)
 
-    with st.expander("➕ Additional PFAS"):
-        influent["PFHxS"] = st.number_input("PFHxS (µg/L)", value=0.0)
-        influent["PFNA"] = st.number_input("PFNA (µg/L)", value=0.0)
-
-# ======================
-# METHODS
-# ======================
-methods = {
-    "GAC": {"best":0.02,"worst":0.20,"eff":0.75},
-    "Ion Exchange": {"best":0.03,"worst":0.12,"eff":0.85},
-    "RO": {"best":0.05,"worst":0.25,"eff":0.95},
-    "AOP": {"best":0.50,"worst":1.00,"eff":0.85}
+influent = {
+    "PFOA": pfoa,
+    "PFOS": pfos,
+    "PFHxS": pfhxs,
+    "PFNA": pfna
 }
 
-method = st.selectbox("Select Treatment Method", list(methods.keys()))
-d = methods[method]
+# =====================================
+# REGULATION
+# =====================================
 
-# ======================
+st.header("Regulatory Target")
+
+targets = {
+    "UK DWI": 0.1,
+    "EU Drinking Water Directive": 0.5,
+    "EPA": 0.004
+}
+
+target_name = st.selectbox(
+    "Regulatory Standard",
+    list(targets.keys())
+)
+
+target_limit = targets[target_name]
+
+# =====================================
+# TREATMENT TRAIN
+# =====================================
+
+st.header("Treatment Train")
+
+selected_methods = st.multiselect(
+    "Select Technologies",
+    [
+        "GAC",
+        "Ion Exchange",
+        "RO",
+        "AOP"
+    ],
+    default=["GAC"]
+)
+
+# =====================================
+# EFFICIENCIES
+# =====================================
+
+efficiency = {
+
+    "PFOA": {
+        "GAC": 0.92,
+        "Ion Exchange": 0.96,
+        "RO": 0.99,
+        "AOP": 0.70
+    },
+
+    "PFOS": {
+        "GAC": 0.98,
+        "Ion Exchange": 0.99,
+        "RO": 0.99,
+        "AOP": 0.75
+    },
+
+    "PFHxS": {
+        "GAC": 0.85,
+        "Ion Exchange": 0.95,
+        "RO": 0.99,
+        "AOP": 0.65
+    },
+
+    "PFNA": {
+        "GAC": 0.90,
+        "Ion Exchange": 0.96,
+        "RO": 0.99,
+        "AOP": 0.70
+    }
+
+}
+
+# =====================================
+# TECHNOLOGY COSTS
+# =====================================
+
+tech_cost = {
+
+    "GAC": {
+        "best": 0.02,
+        "worst": 0.20
+    },
+
+    "Ion Exchange": {
+        "best": 0.03,
+        "worst": 0.12
+    },
+
+    "RO": {
+        "best": 0.05,
+        "worst": 0.25
+    },
+
+    "AOP": {
+        "best": 0.50,
+        "worst": 1.00
+    }
+
+}
+
+# =====================================
 # CALCULATIONS
-# ======================
-selected_cost = get_cost(d["best"], d["worst"])
+# =====================================
 
-mass_in = sum([v*water_volume/1e9 for v in influent.values()])
-remaining = mass_in*(1-d["eff"])
+remaining = {}
+removed_total = 0
+mass_total = 0
 
-final_conc = remaining*1e9/water_volume
-removed = mass_in - remaining
+for compound, conc in influent.items():
 
-treatment_cost = selected_cost*water_volume
+    current = conc
 
-capex = flow_rate*200
-opex = treatment_cost*0.01
-waste = water_volume*0.05*250
+    for method in selected_methods:
+
+        removal = efficiency[compound][method]
+
+        current = current * (1 - removal)
+
+    remaining[compound] = current
+
+    mass_in = conc * water_volume / 1e9
+    mass_out = current * water_volume / 1e9
+
+    mass_total += mass_in
+    removed_total += (mass_in - mass_out)
+
+final_concentration = sum(remaining.values())
+
+# =====================================
+# COMPLIANCE
+# =====================================
+
+st.header("Compliance Check")
+
+if final_concentration <= target_limit:
+    st.success(f"✅ Compliant with {target_name}")
+
+else:
+    st.error(f"❌ Exceeds {target_name}")
+
+# =====================================
+# COSTING
+# =====================================
+
+cost_per_m3 = 0
+
+for method in selected_methods:
+
+    best = tech_cost[method]["best"]
+    worst = tech_cost[method]["worst"]
+
+    if scenario == "Optimistic":
+        value = best
+
+    elif scenario == "Conservative":
+        value = worst
+
+    else:
+        value = best + (
+            (worst - best)
+            * uncertainty
+            / 100
+        )
+
+    cost_per_m3 += value
+
+treatment_cost = cost_per_m3 * water_volume
+
+capex = flow_rate * 200
+opex = treatment_cost * 0.01
+waste = water_volume * 0.05 * 250
 
 total_cost = capex + opex + waste
 
-# ======================
+# =====================================
+# CARBON
+# =====================================
+
+carbon_factors = {
+
+    "GAC": 0.2,
+    "Ion Exchange": 0.15,
+    "RO": 0.8,
+    "AOP": 1.2
+
+}
+
+carbon = 0
+
+for method in selected_methods:
+    carbon += water_volume * carbon_factors[method]
+
+# =====================================
+# LIABILITY
+# =====================================
+
+cost_per_kg = total_cost / max(
+    removed_total,
+    0.000001
+)
+
+liability = removed_total * cost_per_kg
+
+# =====================================
+# MONTE CARLO
+# =====================================
+
+distribution = np.random.triangular(
+    cost_per_m3 * 0.5,
+    cost_per_m3,
+    cost_per_m3 * 1.5,
+    10000
+)
+
+p10 = np.percentile(distribution, 10)
+p50 = np.percentile(distribution, 50)
+p90 = np.percentile(distribution, 90)
+
+# =====================================
 # RESULTS
-# ======================
+# =====================================
+
 st.header("Results")
 
-col1, col2 = st.columns(2)
-col1.metric("PFAS Removed (kg)", f"{removed:.4f}")
-col2.metric("Final Concentration (µg/L)", f"{final_conc:.4f}")
+c1, c2, c3, c4 = st.columns(4)
 
-# ======================
-# COST RANGE
-# ======================
-st.header("Cost Range")
+c1.metric(
+    "PFAS Removed (kg)",
+    f"{removed_total:.3f}"
+)
 
-df = pd.DataFrame({
-    "Scenario":["Best","Selected","Worst"],
-    "£/m³":[d["best"],selected_cost,d["worst"]],
-    "Total (£)":[
-        d["best"]*water_volume,
-        treatment_cost,
-        d["worst"]*water_volume
+c2.metric(
+    "Final PFAS (µg/L)",
+    f"{final_concentration:.4f}"
+)
+
+c3.metric(
+    "Total Cost (£)",
+    f"{total_cost:,.0f}"
+)
+
+c4.metric(
+    "Carbon (kg CO₂e)",
+    f"{carbon:,.0f}"
+)
+
+# =====================================
+# LIABILITY
+# =====================================
+
+st.header("Polluter Pays")
+
+c1, c2 = st.columns(2)
+
+c1.metric(
+    "Cost per kg Removed",
+    f"£{cost_per_kg:,.0f}"
+)
+
+c2.metric(
+    "Estimated Liability",
+    f"£{liability:,.0f}"
+)
+
+# =====================================
+# COST BREAKDOWN
+# =====================================
+
+st.header("Cost Breakdown")
+
+cost_df = pd.DataFrame({
+
+    "Category": [
+        "CAPEX",
+        "OPEX",
+        "Waste"
+    ],
+
+    "Cost": [
+        capex,
+        opex,
+        waste
     ]
+
 })
 
-st.table(df)
+fig = px.pie(
+    cost_df,
+    names="Category",
+    values="Cost",
+    title="Project Cost Breakdown"
+)
 
-# ======================
-# TOTAL COST
-# ======================
-st.header("Total Cost")
-st.metric("Estimated Cost (£)", f"{total_cost:,.0f}")
+st.plotly_chart(
+    fig,
+    use_container_width=True
+)
 
-# ======================
-# CHART
-# ======================
-df_chart = pd.DataFrame({
-    "Type":["CAPEX","OPEX","Waste"],
-    "Cost":[capex,opex,waste]
+# =====================================
+# MONTE CARLO CHART
+# =====================================
+
+st.header("Monte Carlo Cost Analysis")
+
+mc_df = pd.DataFrame({
+    "Cost £/m³": distribution
 })
 
-st.plotly_chart(px.bar(df_chart, x="Type", y="Cost"))
+fig2 = px.histogram(
+    mc_df,
+    x="Cost £/m³",
+    nbins=40
+)
 
-# ======================
+st.plotly_chart(
+    fig2,
+    use_container_width=True
+)
+
+col1, col2, col3 = st.columns(3)
+
+col1.metric("P10", f"£{p10:.2f}")
+col2.metric("P50", f"£{p50:.2f}")
+col3.metric("P90", f"£{p90:.2f}")
+
+# =====================================
+# TECHNOLOGY SUMMARY
+# =====================================
+
+st.header("Technology Comparison")
+
+comparison = pd.DataFrame({
+
+    "Technology": [
+        "GAC",
+        "Ion Exchange",
+        "RO",
+        "AOP"
+    ],
+
+    "Removal %": [
+        75,
+        85,
+        95,
+        85
+    ],
+
+    "Relative Cost": [
+        2,
+        3,
+        5,
+        4
+    ],
+
+    "Carbon Score": [
+        2,
+        2,
+        5,
+        4
+    ]
+
+})
+
+fig3 = px.scatter(
+    comparison,
+    x="Relative Cost",
+    y="Removal %",
+    color="Technology",
+    size="Carbon Score"
+)
+
+st.plotly_chart(
+    fig3,
+    use_container_width=True
+)
+
+# =====================================
 # REPORT
-# ======================
-st.header("📄 Export Report")
+# =====================================
 
-logo_base64 = ""
+st.header("Report Summary")
 
-if os.path.exists(logo_path):
-    with open(logo_path, "rb") as img:
-        logo_base64 = base64.b64encode(img.read()).decode()
+report = pd.DataFrame({
 
-report_html = f"""
-<div style="background:white;padding:40px;font-family:Arial">
+    "Parameter": [
+        "Treatment Train",
+        "Final Concentration",
+        "Total Cost",
+        "PFAS Removed",
+        "Carbon Footprint",
+        "Liability"
+    ],
 
-<img src="data:image/png;base64,{logo_base64}" width="120">
+    "Value": [
+        " → ".join(selected_methods),
+        f"{final_concentration:.4f} µg/L",
+        f"£{total_cost:,.0f}",
+        f"{removed_total:.3f} kg",
+        f"{carbon:,.0f} kg CO₂e",
+        f"£{liability:,.0f}"
+    ]
 
-<h1>PFAS Treatment Report</h1>
+})
 
-<hr>
+st.table(report)
 
-<h2>Method</h2>
-<p>{method}</p>
-
-<h2>Results</h2>
-<ul>
-<li>PFAS Removed: {removed:.4f} kg</li>
-<li>Final Concentration: {final_conc:.4f} µg/L</li>
-</ul>
-
-<h2>Cost Summary</h2>
-<ul>
-<li>Treatment Cost: £{treatment_cost:,.0f}</li>
-<li>CAPEX: £{capex:,.0f}</li>
-<li>OPEX: £{opex:,.0f}</li>
-<li>Total Cost: £{total_cost:,.0f}</li>
-</ul>
-
-<h2>Scenario</h2>
-<p>{scenario} (Uncertainty: {uncertainty}%)</p>
-
-<hr>
-<p style="font-size:12px;color:gray">
-Screening-level estimate only. Not for design or procurement.
-</p>
-
-</div>
-"""
-
-components.html(report_html, height=600)
-
-st.info("👉 Press Ctrl + P → Save as PDF")
+st.success("PFAS Decision Support Analysis Complete")
