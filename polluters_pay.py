@@ -64,7 +64,7 @@ with col1:
 with col2:
 
     st.title(
-        "PFAS Polluter-Pays Decision Support Tool"
+        "PFAS Decision Support Tool"
     )
 
     st.caption(
