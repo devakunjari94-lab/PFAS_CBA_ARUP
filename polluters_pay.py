@@ -5,7 +5,6 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import streamlit.components.v1 as components
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 
 st.set_page_config(page_title="PFAS Decision Support Tool", layout="wide")
