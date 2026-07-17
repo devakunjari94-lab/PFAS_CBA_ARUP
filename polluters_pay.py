@@ -500,84 +500,34 @@ st.download_button(
     file_name="PFAS_Report.csv",
     mime="text/csv"
 )
+# ==========================================================
+# REPORT PREVIEW
+# ==========================================================
 
-excel_buffer = BytesIO()
-
-with pd.ExcelWriter(
-    excel_buffer,
-    engine="openpyxl"
-) as writer:
-
-    summary_df.to_excel(
-        writer,
-        sheet_name="Summary",
-        index=False
-    )
-
-    cost_df.to_excel(
-        writer,
-        sheet_name="Cost Breakdown",
-        index=False
-    )
-
-st.download_button(
-    "📊 Download Excel",
-    excel_buffer.getvalue(),
-    file_name="PFAS_Report.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-)
-
-html_report = f"""
-<html>
-<body>
-<h1>PFAS Decision Support Report</h1>
-
-<h2>Site Summary</h2>
-
-<p><b>Media:</b> {media}</p>
-<p><b>Source:</b> {source}</p>
-<p><b>Target:</b> {target_name}</p>
-<p><b>Treatment:</b> {" -> ".join(selected_methods)}</p>
-<p><b>Final PFAS:</b> {final_conc:.4f} {units}</p>
-<p><b>PFAS Removed:</b> {removed_total:.3f}</p>
-<p><b>Total Cost:</b> £{total_cost:,.0f}</p>
-
-"""
-</body>
-</html>
-"""
-
-st.download_button(
-    "📄 Download HTML",
-    html_report,
-    file_name="PFAS_Report.html",
-    mime="text/html"
-)
-
+st.markdown("---")
 st.subheader("📋 Report Preview")
 
-st.markdown(f"""
-### Site Summary
+col1, col2 = st.columns(2)
 
-**Media:** {media}
+with col1:
+    st.write(f"**Media:** {media}")
+    st.write(f"**Source:** {source}")
+    st.write(f"**Compliance Target:** {target_name}")
+    st.write(f"**Treatment Train:** {' → '.join(selected_methods)}")
 
-**Source:** {source}
+with col2:
+    st.write(f"**Final PFAS:** {final_conc:.4f} {units}")
+    st.write(f"**PFAS Removed:** {removed_total:.3f}")
+    st.write(f"**Total Cost:** £{total_cost:,.0f}")
 
-**Compliance Target:** {target_name}
-
-**Treatment Train:** {" → ".join(selected_methods)}
-
-**Final PFAS:** {final_conc:.4f} {units}
-
-**PFAS Removed:** {removed_total:.3f}
-
-**Total Cost:** £{total_cost:,.0f}
-""")
+st.markdown("### Compliance Status")
 
 if final_conc <= target_limit:
     st.success(f"✅ Compliant with {target_name}")
 else:
     st.error(f"❌ Exceeds {target_name}")
+
+st.markdown("### Cost Breakdown")
 
 st.dataframe(
     cost_df,
@@ -588,4 +538,39 @@ st.dataframe(
 st.plotly_chart(
     fig,
     use_container_width=True
+)
+
+report_df = pd.DataFrame({
+    "Metric": [
+        "Media",
+        "Source",
+        "Compliance Target",
+        "Treatment Train",
+        "Final PFAS",
+        "PFAS Removed",
+        "CAPEX (£)",
+        "OPEX (£)",
+        "Waste (£)",
+        "Total Cost (£)"
+    ],
+    "Value": [
+        media,
+        source,
+        target_name,
+        " -> ".join(selected_methods),
+        f"{final_conc:.4f} {units}",
+        f"{removed_total:.3f}",
+        f"{capex:,.0f}",
+        f"{opex:,.0f}",
+        f"{waste:,.0f}",
+        f"{total_cost:,.0f}"
+    ]
+})
+
+st.markdown("### Detailed Results")
+
+st.dataframe(
+    report_df,
+    use_container_width=True,
+    hide_index=True
 )
