@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import streamlit.components.v1 as components
-from io import BytesIO
 
 # ==================================================
 # PAGE CONFIG
@@ -24,21 +23,21 @@ if "auth" not in st.session_state:
 
 if not st.session_state.auth:
 
-    st.title("🔐 PFAS Tool Login")
+    st.title("🔐 PFAS Login")
 
-    pw = st.text_input(
+    password = st.text_input(
         "Password",
         type="password"
     )
 
     if st.button("Login"):
 
-        if pw == PASSWORD:
+        if password == PASSWORD:
             st.session_state.auth = True
             st.rerun()
 
         else:
-            st.error("Incorrect Password")
+            st.error("Incorrect password")
 
     st.stop()
 
@@ -49,7 +48,7 @@ if not st.session_state.auth:
 st.title("PFAS Decision Support Tool")
 
 st.caption(
-    "Screening-Level PFAS Treatment, Compliance and Liability Assessment"
+    "Screening-Level Treatment, Compliance & Liability Assessment"
 )
 
 # ==================================================
@@ -66,38 +65,24 @@ with st.expander("⚠ Scope & Limitations"):
     - Early-stage planning
     - Technology comparison
     - Option screening
-    - Liability assessments
+    - Liability assessment
 
-    Not intended for detailed design or regulatory submissions.
+    Not intended for detailed engineering design.
     """)
 
 # ==================================================
 # MEDIA
 # ==================================================
 
+st.header("Environmental Media")
+
 media = st.radio(
-    "Environmental Media",
+    "Select Media",
     ["Water", "Soil"]
 )
 
 # ==================================================
-# SCENARIO
-# ==================================================
-
-scenario = st.selectbox(
-    "Cost Scenario",
-    ["Optimistic", "Average", "Conservative"]
-)
-
-uncertainty = st.slider(
-    "Uncertainty (%)",
-    0,
-    100,
-    50
-)
-
-# ==================================================
-# SITE DATA
+# SITE INFO
 # ==================================================
 
 st.header("Site Information")
@@ -131,18 +116,19 @@ else:
     )
 
 # ==================================================
-# MAP
+# PFAS MAP
 # ==================================================
 
-st.header("🌍 Global PFAS Map")
+st.header("🌍 Global PFAS Database")
 
 st.markdown(
-    "[Open Global PFAS Database](https://pdh.cnrs.fr/en/map/)"
+    "[Open Global PFAS Map](https://pdh.cnrs.fr/en/map/)"
 )
 
 components.iframe(
     "https://pdh.cnrs.fr/en/map/",
-    height=500
+    height=500,
+    scrolling=True
 )
 
 # ==================================================
@@ -160,8 +146,10 @@ influent = st.number_input(
 # SOURCE
 # ==================================================
 
+st.header("Potential Source")
+
 source = st.selectbox(
-    "Potential Source",
+    "Source",
     [
         "Unknown",
         "AFFF",
@@ -173,6 +161,19 @@ source = st.selectbox(
         "WWTW"
     ]
 )
+
+source_notes = {
+    "Unknown": "Source not yet characterised.",
+    "AFFF": "Associated with firefighting foam releases.",
+    "Airport": "Often linked to fire training areas.",
+    "Landfill": "PFAS may arise from leachate.",
+    "Chemical Manufacturing": "Potential industrial PFAS source.",
+    "Textiles": "Historically associated with fluorinated coatings.",
+    "Metal Plating": "PFAS used as mist suppressants.",
+    "WWTW": "Wastewater treatment can accumulate PFAS."
+}
+
+st.info(source_notes[source])
 
 # ==================================================
 # TARGETS
@@ -192,8 +193,8 @@ else:
 
     targets = {
         "Residential": 0.01,
-        "Commercial": 0.1,
-        "Industrial": 1.0
+        "Commercial": 0.10,
+        "Industrial": 1.00
     }
 
     units = "mg/kg"
@@ -209,16 +210,13 @@ target_limit = targets[target_name]
 # TREATMENT
 # ==================================================
 
+st.header("Treatment Technologies")
+
 if media == "Water":
 
-    techs = [
-        "GAC",
-        "Ion Exchange",
-        "RO",
-        "AOP"
-    ]
+    technologies = ["GAC", "Ion Exchange", "RO", "AOP"]
 
-    efficiency = {
+    efficiencies = {
         "GAC": 0.80,
         "Ion Exchange": 0.90,
         "RO": 0.98,
@@ -226,22 +224,22 @@ if media == "Water":
     }
 
     costs = {
-        "GAC": (0.02, 0.20),
-        "Ion Exchange": (0.03, 0.12),
-        "RO": (0.05, 0.25),
-        "AOP": (0.50, 1.00)
+        "GAC": 0.10,
+        "Ion Exchange": 0.12,
+        "RO": 0.25,
+        "AOP": 0.80
     }
 
 else:
 
-    techs = [
+    technologies = [
         "Excavation + Disposal",
         "Soil Washing",
         "Thermal Desorption",
         "Solidification/Stabilisation"
     ]
 
-    efficiency = {
+    efficiencies = {
         "Excavation + Disposal": 0.95,
         "Soil Washing": 0.70,
         "Thermal Desorption": 0.99,
@@ -249,16 +247,16 @@ else:
     }
 
     costs = {
-        "Excavation + Disposal": (100, 350),
-        "Soil Washing": (50, 180),
-        "Thermal Desorption": (250, 700),
-        "Solidification/Stabilisation": (60, 180)
+        "Excavation + Disposal": 250,
+        "Soil Washing": 120,
+        "Thermal Desorption": 500,
+        "Solidification/Stabilisation": 100
     }
 
 selected_methods = st.multiselect(
-    "Treatment Technologies",
-    techs,
-    default=[techs[0]]
+    "Select Technologies",
+    technologies,
+    default=[technologies[0]]
 )
 
 # ==================================================
@@ -268,24 +266,9 @@ selected_methods = st.multiselect(
 final_conc = influent
 
 for method in selected_methods:
-    final_conc *= (1 - efficiency[method])
+    final_conc *= (1 - efficiencies[method])
 
-cost_factor = 0
-
-for method in selected_methods:
-
-    low, high = costs[method]
-
-    if scenario == "Optimistic":
-        value = low
-
-    elif scenario == "Conservative":
-        value = high
-
-    else:
-        value = low + ((high - low) * uncertainty / 100)
-
-    cost_factor += value
+cost_factor = sum(costs[m] for m in selected_methods)
 
 if media == "Water":
 
@@ -293,7 +276,7 @@ if media == "Water":
     capex = flow_rate * 200
     waste = water_volume * 0.05 * 250
 
-    removed_total = (
+    removed_mass = (
         (influent - final_conc)
         * water_volume
         / 1e9
@@ -305,10 +288,9 @@ else:
     capex = soil_mass * 10
     waste = soil_mass * 50
 
-    removed_total = (
+    removed_mass = (
         (influent - final_conc)
-        * soil_mass
-        * 1000
+        * soil_mass * 1000
         / 1e9
     )
 
@@ -335,7 +317,7 @@ c1, c2, c3, c4 = st.columns(4)
 
 c1.metric(
     "PFAS Removed",
-    f"{removed_total:.3f}"
+    f"{removed_mass:.3f}"
 )
 
 c2.metric(
@@ -354,7 +336,7 @@ c4.metric(
 )
 
 # ==================================================
-# COST CHART
+# CHART
 # ==================================================
 
 cost_df = pd.DataFrame({
@@ -379,6 +361,8 @@ st.plotly_chart(
 # SUMMARY
 # ==================================================
 
+st.header("Summary")
+
 summary_df = pd.DataFrame({
     "Metric": [
         "Media",
@@ -396,12 +380,10 @@ summary_df = pd.DataFrame({
     ]
 })
 
-st.header("Summary")
-
 st.table(summary_df)
 
 # ==================================================
-# EXPORTS
+# EXPORT
 # ==================================================
 
 st.header("Export Report")
@@ -409,36 +391,10 @@ st.header("Export Report")
 csv = summary_df.to_csv(index=False)
 
 st.download_button(
-    "📥 Download CSV",
-    csv,
-    "PFAS_Report.csv",
-    "text/csv"
-)
-
-excel_buffer = BytesIO()
-
-with pd.ExcelWriter(
-    excel_buffer,
-    engine="openpyxl"
-) as writer:
-
-    summary_df.to_excel(
-        writer,
-        sheet_name="Summary",
-        index=False
-    )
-
-    cost_df.to_excel(
-        writer,
-        sheet_name="Cost Breakdown",
-        index=False
-    )
-
-st.download_button(
-    "📊 Download Excel",
-    excel_buffer.getvalue(),
-    "PFAS_Report.xlsx",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    label="📥 Download CSV Report",
+    data=csv,
+    file_name="PFAS_Report.csv",
+    mime="text/csv"
 )
 
 # ==================================================
@@ -466,7 +422,7 @@ report_df = pd.DataFrame({
         target_name,
         " -> ".join(selected_methods),
         f"{final_conc:.4f} {units}",
-        f"{removed_total:.3f}",
+        f"{removed_mass:.3f}",
         f"{capex:,.0f}",
         f"{opex:,.0f}",
         f"{waste:,.0f}",
