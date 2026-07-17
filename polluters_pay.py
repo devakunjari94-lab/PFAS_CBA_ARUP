@@ -457,87 +457,12 @@ fig = px.bar(
 )
 
 st.plotly_chart(
-    fig,
-    use_container_width=True
-)
-
-# ==========================================================
-# SUMMARY TABLE
-# ==========================================================
-
-st.header("Summary")
-
-summary_df = pd.DataFrame({
-    "Metric": [
-        "Media",
-        "Source",
-        "Treatment Train",
-        "Final PFAS",
-        "Total Cost"
-    ],
-    "Value": [
-        media,
-        source,
-        " -> ".join(selected_methods),
-        f"{final_conc:.4f} {units}",
-        f"£{total_cost:,.0f}"
-    ]
-})
-
-st.table(summary_df)
-
-# ==========================================================
-# EXPORTS
-# ==========================================================
-
-st.header("Export Report")
-
-csv = summary_df.to_csv(index=False)
-
-st.download_button(
-    "📥 Download CSV",
-    csv,
-    file_name="PFAS_Report.csv",
-    mime="text/csv"
-)
-# ==========================================================
-# REPORT PREVIEW
-# ==========================================================
-
-st.markdown("---")
-st.subheader("📋 Report Preview")
-
-col1, col2 = st.columns(2)
-
-with col1:
-    st.write(f"**Media:** {media}")
-    st.write(f"**Source:** {source}")
-    st.write(f"**Compliance Target:** {target_name}")
-    st.write(f"**Treatment Train:** {' → '.join(selected_methods)}")
-
-with col2:
-    st.write(f"**Final PFAS:** {final_conc:.4f} {units}")
-    st.write(f"**PFAS Removed:** {removed_total:.3f}")
-    st.write(f"**Total Cost:** £{total_cost:,.0f}")
-
-st.markdown("### Compliance Status")
-
-if final_conc <= target_limit:
-    st.success(f"✅ Compliant with {target_name}")
-else:
-    st.error(f"❌ Exceeds {target_name}")
-
-st.markdown("### Cost Breakdown")
+   st.markdown("### Cost Breakdown")
 
 st.dataframe(
     cost_df,
     use_container_width=True,
     hide_index=True
-)
-
-st.plotly_chart(
-    fig,
-    use_container_width=True
 )
 
 report_df = pd.DataFrame({
