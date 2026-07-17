@@ -458,6 +458,7 @@ fig = px.bar(
 
 st.plotly_chart(
    st.markdown("### Cost Breakdown")
+)
 
 st.dataframe(
     cost_df,
