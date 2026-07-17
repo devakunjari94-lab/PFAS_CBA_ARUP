@@ -542,6 +542,7 @@ html_report = f"""
 <p><b>PFAS Removed:</b> {removed_total:.3f}</p>
 <p><b>Total Cost:</b> £{total_cost:,.0f}</p>
 
+"""
 </body>
 </html>
 """
@@ -553,10 +554,38 @@ st.download_button(
     mime="text/html"
 )
 
-st.subheader("Report Preview")
+st.subheader("📋 Report Preview")
 
-components.html(
-    html_report,
-    height=400,
-    scrolling=True
+st.markdown(f"""
+### Site Summary
+
+**Media:** {media}
+
+**Source:** {source}
+
+**Compliance Target:** {target_name}
+
+**Treatment Train:** {" → ".join(selected_methods)}
+
+**Final PFAS:** {final_conc:.4f} {units}
+
+**PFAS Removed:** {removed_total:.3f}
+
+**Total Cost:** £{total_cost:,.0f}
+""")
+
+if final_conc <= target_limit:
+    st.success(f"✅ Compliant with {target_name}")
+else:
+    st.error(f"❌ Exceeds {target_name}")
+
+st.dataframe(
+    cost_df,
+    use_container_width=True,
+    hide_index=True
+)
+
+st.plotly_chart(
+    fig,
+    use_container_width=True
 )
